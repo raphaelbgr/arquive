@@ -1,0 +1,59 @@
+# Face Detection & Recognition System Configuration
+
+# Reference faces directory
+faces_dir: "./recognition/faces"
+
+# Media directories to scan (local or network paths)
+media_dirs:
+  - "F:/Photos"
+  - "D:/Videos"
+  # - "\\\\192.168.7.102\\Shared\\Media"
+
+# Recognition settings
+recognition:
+  model: "buffalo_l"
+  det_size: [640, 640]
+  threshold: 0.45
+  # Presets: high_precision=0.50, balanced=0.45, high_recall=0.35
+
+# Video processing
+video:
+  sample_fps: 2
+  batch_size: 16
+  merge_gap_seconds: 3
+
+# Coordinator settings
+coordinator:
+  host: "0.0.0.0"
+  port: 8600
+  task_timeout_seconds: 300
+
+# Worker definitions
+workers:
+  - name: "desktop"
+    host: "localhost"
+    gpu: "cuda"
+    locality_paths:
+      - "F:/"
+      - "D:/"
+      - "C:/"
+  - name: "avell"
+    host: "192.168.7.103"
+    ssh_alias: "avell"
+    gpu: "cuda"
+    locality_paths:
+      - "C:/Users/"
+  - name: "mac-mini"
+    host: "192.168.7.102"
+    ssh_alias: "mac-mini"
+    gpu: "coreml"
+    locality_paths:
+      - "/Users/"
+      - "/Volumes/"
+
+# Output settings
+output:
+  db_path: "./results/faces.db"
+  thumbnails_dir: "./results/thumbs"
+  json_path: "./results/results.json"
+  html_path: "./results/report.html"
