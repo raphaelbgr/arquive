@@ -141,12 +141,13 @@ class LocalWorker:
         self._running = False
         self._start_time = 0
 
-        # Auto-detect GPUs if not specified
-        if gpu_ids is None:
-            num_gpus = _detect_gpu_count()
-            self.gpu_ids = list(range(num_gpus))
-        else:
+        # Use specified GPUs, or default to GPU 0 only
+        # Multi-GPU requires all GPUs to support the same cuDNN version
+        # (e.g., GTX 1060 Pascal doesn't support cuDNN 9.x)
+        if gpu_ids is not None:
             self.gpu_ids = gpu_ids
+        else:
+            self.gpu_ids = [0]  # Default: primary GPU only
 
         # Shared queues
         self._task_queue = queue.Queue(maxsize=num_prefetch * 2 * len(self.gpu_ids))
