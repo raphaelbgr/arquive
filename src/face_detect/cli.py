@@ -173,10 +173,18 @@ def cmd_worker(args):
     if args.threshold:
         config.recognition.threshold = args.threshold
 
+    # Find path_map for this worker from config
+    path_map = {}
+    for w in config.workers:
+        if w.name == args.name:
+            path_map = w.path_map
+            break
+
     worker = WorkerClient(
         config,
         worker_name=args.name,
         coordinator_url=args.coordinator,
+        path_map=path_map,
     )
 
     try:

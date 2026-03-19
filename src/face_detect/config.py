@@ -47,6 +47,7 @@ class WorkerDef:
     ssh_alias: str = ""
     gpu: str = "cuda"
     locality_paths: list = field(default_factory=list)
+    path_map: dict = field(default_factory=dict)  # coordinator path prefix -> worker path prefix
 
 
 @dataclass
@@ -116,6 +117,7 @@ def load_config(config_path: str = None) -> Config:
                 ssh_alias=w.get("ssh_alias", ""),
                 gpu=w.get("gpu", "cuda"),
                 locality_paths=w.get("locality_paths", []),
+                path_map=w.get("path_map", {}),
             ))
 
     if "output" in raw:

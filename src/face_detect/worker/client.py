@@ -19,13 +19,26 @@ class WorkerClient:
     """Remote or local worker that pulls tasks from the coordinator API."""
 
     def __init__(self, config: Config, worker_name: str,
-                 coordinator_url: str, index_dir: str = None):
+                 coordinator_url: str, index_dir: str = None,
+                 path_map: dict = None):
         self.config = config
         self.worker_name = worker_name
         self.coordinator_url = coordinator_url.rstrip("/")
         self.index_dir = index_dir
+        self.path_map = path_map or {}
         self.processor = None
         self._running = False
+
+    def _translate_path(self, file_path: str) -> str:
+        """Translate coordinator path to local worker path using path_map."""
+        if not self.path_map:
+            return file_path
+        normalized = file_path.replace("\\", "/")
+        for coord_prefix, worker_prefix in self.path_map.items():
+            cp = coord_prefix.replace("\\", "/")
+            if normalized.startswith(cp):
+                return worker_prefix + file_path[len(coord_prefix):]
+        return file_path
 
     def _download_index(self, dest_dir: str):
         """Download FAISS index from coordinator."""
@@ -107,11 +120,14 @@ class WorkerClient:
 
                 idle_count = 0
                 task_id = task["id"]
-                file_path = task["file_path"]
+                original_path = task["file_path"]
+                file_path = self._translate_path(original_path)
                 log.info("Processing task %d: %s", task_id, file_path)
 
                 try:
                     result = self.processor.process_file(file_path)
+                    # Report back with the original coordinator path
+                    result["file_path"] = original_path
                     match_count = len(result.get("matches", []))
                     log.info("  Task %d done: %d matches found", task_id, match_count)
 

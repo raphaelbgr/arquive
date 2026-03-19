@@ -32,27 +32,33 @@ coordinator:
   task_timeout_seconds: 300
 
 # Worker definitions
+# path_map: translates coordinator paths (Windows local) to worker-accessible paths (SMB)
 workers:
   - name: "desktop"
     host: "localhost"
     gpu: "cuda"
     locality_paths:
       - "F:/"
+      - "H:/"
       - "D:/"
       - "C:/"
+    path_map: {}  # no translation needed, files are local
   - name: "avell"
     host: "192.168.7.103"
     ssh_alias: "avell"
     gpu: "cuda"
-    locality_paths:
-      - "C:/Users/"
+    locality_paths: []
+    path_map:
+      "F:/": "\\\\192.168.7.101\\Trunk 2 - 3TB drive\\"
+      "H:/": "\\\\192.168.7.101\\Trunk 4 - 8TB drive\\"
   - name: "mac-mini"
     host: "192.168.7.102"
     ssh_alias: "mac-mini"
     gpu: "coreml"
-    locality_paths:
-      - "/Users/"
-      - "/Volumes/"
+    locality_paths: []
+    path_map:
+      "F:/": "/Volumes/Trunk 2 - 3TB drive/"
+      "H:/": "/Volumes/Trunk 4 - 8TB drive/"
 
 # Output settings
 output:
