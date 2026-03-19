@@ -97,6 +97,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="60">
     <title>Face Detection Report</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -210,8 +211,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="stats">
         {% if stats %}
         Scanned {{ stats.processed_files or 0 }} files |
-        {{ stats.matched_files or 0 }} with matches |
-        {{ stats.failed_files or 0 }} failed
+        {{ stats.matched_files or 0 }} files with matches |
+        {{ stats.total_matches or 0 }} total detections |
+        {{ stats.failed_files or 0 }} failed |
+        Auto-refreshes every 60s
         {% endif %}
     </div>
 
@@ -226,7 +229,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                  data-filename="{{ match.file_path | basename }}"
                  data-fullpath="{{ match.file_path }}">
                 {% if match.thumbnail_path and thumb_exists(match.thumbnail_path) %}
-                <img src="{{ thumb_rel(match.thumbnail_path) }}" alt="{{ person_name }}">
+                <img loading="lazy" src="{{ thumb_rel(match.thumbnail_path) }}" alt="{{ person_name }}">
                 {% else %}
                 <div class="no-thumb">No thumbnail</div>
                 {% endif %}

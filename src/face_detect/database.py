@@ -169,14 +169,15 @@ class Database:
         return by_person
 
     def get_scan_stats(self, job_id: int = None) -> dict:
-        if job_id:
-            row = self.conn.execute(
-                "SELECT * FROM scan_jobs WHERE id=?", (job_id,)
-            ).fetchone()
-        else:
-            row = self.conn.execute(
-                "SELECT * FROM scan_jobs ORDER BY id DESC LIMIT 1"
-            ).fetchone()
+        """Get aggregate stats across ALL scan jobs."""
+        row = self.conn.execute("""
+            SELECT
+                COALESCE(SUM(processed_files), 0) as processed_files,
+                COALESCE(SUM(failed_files), 0) as failed_files,
+                (SELECT COUNT(DISTINCT file_path) FROM matches) as matched_files,
+                (SELECT COUNT(*) FROM matches) as total_matches
+            FROM scan_jobs
+        """).fetchone()
         return dict(row) if row else {}
 
     def get_persons(self) -> list:

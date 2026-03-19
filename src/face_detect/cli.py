@@ -127,6 +127,18 @@ def cmd_scan(args):
     requeue_thread = threading.Thread(target=_requeue_loop, daemon=True)
     requeue_thread.start()
 
+    # Auto-regenerate HTML report every 60 seconds
+    def _report_loop():
+        while True:
+            time.sleep(60)
+            try:
+                generate_html_report(db, config.output.html_path, config.output.thumbnails_dir)
+            except Exception as e:
+                log.warning("Report generation failed: %s", e)
+
+    report_thread = threading.Thread(target=_report_loop, daemon=True)
+    report_thread.start()
+
     # Use optimized LocalWorker (bypasses HTTP, prefetches I/O)
     local_worker = LocalWorker(
         config, scheduler, db,
