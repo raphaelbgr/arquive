@@ -22,24 +22,21 @@ _STOP = object()
 
 
 def _detect_gpu_count() -> int:
-    """Detect how many CUDA GPUs are available."""
-    init_gpu()
+    """Detect how many real CUDA GPUs are available via nvidia-smi."""
+    import subprocess
     try:
-        from onnxruntime import InferenceSession
-        count = 0
-        for i in range(8):
-            try:
-                sess = InferenceSession(
-                    str(Path.home() / ".insightface/models/buffalo_l/det_10g.onnx"),
-                    providers=[("CUDAExecutionProvider", {"device_id": str(i)})],
-                )
-                del sess
-                count += 1
-            except Exception:
-                break
-        return max(count, 1)
-    except Exception:
-        return 1
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0:
+            lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
+            count = len(lines)
+            log.info("Detected %d CUDA GPU(s) via nvidia-smi", count)
+            return max(count, 1)
+    except Exception as e:
+        log.warning("nvidia-smi failed: %s", e)
+    return 1
 
 
 class GPUWorkerThread:
