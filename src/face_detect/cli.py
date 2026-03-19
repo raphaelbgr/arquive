@@ -13,6 +13,7 @@ from .database import Database
 from .indexer import FaceIndexer
 from .coordinator.scheduler import TaskScheduler
 from .coordinator.api import create_api
+from .worker.local_worker import LocalWorker
 from .worker.client import WorkerClient
 from .worker.processor import MediaProcessor
 from .reports.generator import (
@@ -117,14 +118,7 @@ def cmd_scan(args):
         orchestrator = Orchestrator(config, coordinator_url)
         orchestrator.start_remote_workers()
 
-    # Start local worker
-    local_worker = WorkerClient(
-        config, worker_name="desktop",
-        coordinator_url=coordinator_url,
-        index_dir=index_dir,
-    )
-
-    # Start stale task requeuer
+    # Start stale task requeuer (for remote workers)
     def _requeue_loop():
         while True:
             time.sleep(60)
@@ -133,20 +127,14 @@ def cmd_scan(args):
     requeue_thread = threading.Thread(target=_requeue_loop, daemon=True)
     requeue_thread.start()
 
-    # Progress reporter
-    def _progress_loop():
-        while True:
-            time.sleep(10)
-            p = scheduler.get_progress()
-            total_done = p["done"] + p["failed"]
-            print(f"\r  Progress: {total_done}/{p['total']} "
-                  f"({p['progress_pct']:.1f}%) "
-                  f"[done={p['done']}, failed={p['failed']}, "
-                  f"assigned={p['assigned']}, pending={p['pending']}]",
-                  end="", flush=True)
-
-    progress_thread = threading.Thread(target=_progress_loop, daemon=True)
-    progress_thread.start()
+    # Use optimized LocalWorker (bypasses HTTP, prefetches I/O)
+    local_worker = LocalWorker(
+        config, scheduler, db,
+        index_dir=index_dir,
+        scan_job_id=scan_job_id,
+        worker_name="desktop",
+        num_prefetch=4,
+    )
 
     # Run local worker (blocking)
     try:

@@ -29,16 +29,24 @@ class MediaProcessor:
         self._batch_size = config.video.batch_size
 
     def init_model(self):
-        """Initialize InsightFace model for detection + embedding."""
+        """Initialize InsightFace model for detection + embedding.
+
+        Only loads detection + recognition models (skips landmarks, gender/age)
+        for faster processing.
+        """
         if self.app is not None:
             return
         providers = get_providers()
         log.info("Initializing InsightFace model: %s (providers: %s)",
                  self.config.recognition.model, providers)
-        self.app = FaceAnalysis(name=self.config.recognition.model, providers=providers)
+        self.app = FaceAnalysis(
+            name=self.config.recognition.model,
+            providers=providers,
+            allowed_modules=["detection", "recognition"],
+        )
         det_w, det_h = self.config.recognition.det_size
         self.app.prepare(ctx_id=0, det_size=(det_w, det_h))
-        log.info("InsightFace model ready for processing")
+        log.info("InsightFace model ready (detection + recognition only)")
 
     def process_file(self, file_path: str) -> dict:
         """Process a single image or video file.
