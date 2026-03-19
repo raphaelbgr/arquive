@@ -156,9 +156,56 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .type-video { background: #1a237e; color: #9fa8da; }
         .type-image { background: #004d40; color: #80cbc4; }
         .summary { margin-bottom: 0.5rem; color: #aaa; font-size: 0.9rem; }
+
+        /* Lightbox overlay */
+        .lightbox {
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; background: rgba(0,0,0,0.92);
+            z-index: 1000; justify-content: center; align-items: center;
+            flex-direction: column; cursor: pointer;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox img {
+            max-width: 92vw; max-height: 80vh; object-fit: contain;
+            border-radius: 8px; box-shadow: 0 4px 40px rgba(0,0,0,0.6);
+        }
+        .lightbox .lb-info {
+            color: #ccc; margin-top: 1rem; text-align: center;
+            font-size: 0.9rem; max-width: 90vw; word-break: break-all;
+        }
+        .lightbox .lb-info .lb-path {
+            color: #888; font-size: 0.8rem; margin-top: 0.3rem;
+        }
+        .lightbox .lb-close {
+            position: absolute; top: 1.5rem; right: 2rem;
+            color: #888; font-size: 2rem; cursor: pointer;
+            transition: color 0.2s; line-height: 1;
+        }
+        .lightbox .lb-close:hover { color: #fff; }
+        .lightbox .lb-nav {
+            position: absolute; top: 50%; transform: translateY(-50%);
+            color: #666; font-size: 3rem; cursor: pointer;
+            transition: color 0.2s; user-select: none; padding: 0 1rem;
+        }
+        .lightbox .lb-nav:hover { color: #fff; }
+        .lightbox .lb-prev { left: 1rem; }
+        .lightbox .lb-next { right: 1rem; }
+        .match-item { cursor: pointer; }
     </style>
 </head>
 <body>
+    <!-- Lightbox overlay -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+        <span class="lb-close" onclick="closeLightbox(event)">&times;</span>
+        <span class="lb-nav lb-prev" onclick="navLightbox(event, -1)">&#8249;</span>
+        <span class="lb-nav lb-next" onclick="navLightbox(event, 1)">&#8250;</span>
+        <img id="lb-img" src="" alt="">
+        <div class="lb-info">
+            <div id="lb-filename"></div>
+            <div class="lb-path" id="lb-path"></div>
+        </div>
+    </div>
+
     <h1>Face Detection Report</h1>
     <div class="stats">
         {% if stats %}
@@ -174,7 +221,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <p class="summary">Found in {{ matches | groupby('file_path') | list | length }} file(s)</p>
         <div class="match-grid">
             {% for match in matches %}
-            <div class="match-item">
+            <div class="match-item" onclick="openLightbox(this)"
+                 data-src="{{ match.file_path | file_uri }}"
+                 data-filename="{{ match.file_path | basename }}"
+                 data-fullpath="{{ match.file_path }}">
                 {% if match.thumbnail_path and thumb_exists(match.thumbnail_path) %}
                 <img src="{{ thumb_rel(match.thumbnail_path) }}" alt="{{ person_name }}">
                 {% else %}
@@ -210,6 +260,65 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <p class="summary">No faces from the reference set were detected in the scanned media.</p>
     </div>
     {% endif %}
+
+    <script>
+    // Lightbox — shows full original image on click
+    const allItems = document.querySelectorAll('.match-item[data-src]');
+    let currentIdx = -1;
+
+    function openLightbox(el) {
+        const idx = Array.from(allItems).indexOf(el);
+        if (idx === -1) return;
+        showAt(idx);
+    }
+
+    function showAt(idx) {
+        if (idx < 0 || idx >= allItems.length) return;
+        currentIdx = idx;
+        const item = allItems[idx];
+        const lb = document.getElementById('lightbox');
+        const img = document.getElementById('lb-img');
+        const fname = document.getElementById('lb-filename');
+        const fpath = document.getElementById('lb-path');
+
+        img.src = item.dataset.src;
+        fname.textContent = item.dataset.filename;
+        fpath.textContent = item.dataset.fullpath;
+        lb.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox(e) {
+        // Don't close when clicking nav arrows or image
+        if (e.target.classList.contains('lb-nav') ||
+            e.target.classList.contains('lb-prev') ||
+            e.target.classList.contains('lb-next')) return;
+        if (e.target.id === 'lb-img') return;
+        document.getElementById('lightbox').classList.remove('active');
+        document.body.style.overflow = '';
+        currentIdx = -1;
+    }
+
+    function navLightbox(e, dir) {
+        e.stopPropagation();
+        const next = currentIdx + dir;
+        if (next >= 0 && next < allItems.length) showAt(next);
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+        if (currentIdx === -1) return;
+        if (e.key === 'Escape') {
+            document.getElementById('lightbox').classList.remove('active');
+            document.body.style.overflow = '';
+            currentIdx = -1;
+        } else if (e.key === 'ArrowLeft') {
+            navLightbox(e, -1);
+        } else if (e.key === 'ArrowRight') {
+            navLightbox(e, 1);
+        }
+    });
+    </script>
 </body>
 </html>"""
 
@@ -225,6 +334,7 @@ def generate_html_report(db: Database, output_path: str, thumbnails_dir: str):
     env = Environment(loader=BaseLoader())
     env.filters["ts"] = format_timestamp
     env.filters["basename"] = lambda p: Path(p).name
+    env.filters["file_uri"] = lambda p: "file:///" + Path(p).as_posix()
 
     def thumb_exists(path):
         return path and Path(path).exists()
