@@ -37,7 +37,8 @@ class WorkerClient:
         for coord_prefix, worker_prefix in self.path_map.items():
             cp = coord_prefix.replace("\\", "/")
             if normalized.startswith(cp):
-                return worker_prefix + file_path[len(coord_prefix):]
+                remainder = normalized[len(cp):]
+                return worker_prefix + remainder
         return file_path
 
     def _download_index(self, dest_dir: str):
