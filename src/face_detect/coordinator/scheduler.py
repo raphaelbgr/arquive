@@ -39,12 +39,13 @@ class Task:
 class TaskScheduler:
     """Manages the task queue for distributed processing."""
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, processed_checker=None):
         self.config = config
         self.tasks = {}  # id -> Task
         self.lock = threading.Lock()
         self._next_id = 1
         self._locality_map = self._build_locality_map()
+        self._is_processed = processed_checker  # callable(file_path) -> bool
 
     def _build_locality_map(self) -> dict:
         """Build mapping from path prefixes to worker names."""
@@ -68,6 +69,7 @@ class TaskScheduler:
         Returns number of tasks created.
         """
         count = 0
+        skipped = 0
         for media_dir in self.config.media_dirs:
             media_path = Path(media_dir)
             if not media_path.exists():
@@ -87,6 +89,12 @@ class TaskScheduler:
                     continue
 
                 file_str = str(item)
+
+                # Skip already-processed files from previous runs
+                if self._is_processed and self._is_processed(file_str):
+                    skipped += 1
+                    continue
+
                 locality = self._resolve_locality(file_str)
 
                 with self.lock:
@@ -95,9 +103,12 @@ class TaskScheduler:
                     self._next_id += 1
                     count += 1
 
-            log.info("  Found %d media files so far", count)
+            log.info("  Found %d new files so far (%d skipped as already processed)", count, skipped)
 
-        log.info("Total tasks created: %d", count)
+        if skipped:
+            log.info("Total tasks created: %d (skipped %d already-processed files)", count, skipped)
+        else:
+            log.info("Total tasks created: %d", count)
         return count
 
     def add_files(self, file_paths: list) -> int:

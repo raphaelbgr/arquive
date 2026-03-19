@@ -5,9 +5,12 @@ faces_dir: "./recognition/faces"
 
 # Media directories to scan (local or network paths)
 media_dirs:
-  - "F:/Photos"
-  - "D:/Videos"
+  - "F:/Raphael/Backups/Raphael/Google Takeout"
+  - "H:/"
   # - "\\\\192.168.7.102\\Shared\\Media"
+
+# Skip files already processed in previous runs
+skip_processed: true
 
 # Recognition settings
 recognition:

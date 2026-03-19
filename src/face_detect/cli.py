@@ -77,8 +77,11 @@ def cmd_scan(args):
         ec = stats.get(person_name, {}).get("embedding_count", 0)
         db.ensure_person(person_name, ec)
 
-    # Build task queue
-    scheduler = TaskScheduler(config)
+    # Build task queue (skip already-processed files if configured)
+    processed_checker = None
+    if config.skip_processed and not args.rescan:
+        processed_checker = db.is_file_processed
+    scheduler = TaskScheduler(config, processed_checker=processed_checker)
 
     if args.files:
         total = scheduler.add_files(args.files)
@@ -86,7 +89,7 @@ def cmd_scan(args):
         total = scheduler.scan_media_dirs()
 
     if total == 0:
-        print("No media files found to scan.")
+        print("No new media files to scan (all previously processed or none found).")
         sys.exit(0)
 
     print(f"\nScan started: {total} files to process")
@@ -262,6 +265,8 @@ def main():
     p_scan.add_argument("--threshold", type=float, help="Recognition threshold (0.0-1.0)")
     p_scan.add_argument("--preset", choices=list(THRESHOLD_PRESETS.keys()),
                         help="Use a threshold preset")
+    p_scan.add_argument("--rescan", action="store_true",
+                        help="Ignore previous results, rescan all files")
 
     # worker
     p_worker = sub.add_parser("worker", help="Run as a remote worker")
