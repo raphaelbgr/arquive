@@ -29,12 +29,12 @@ def create_api(scheduler: TaskScheduler, db: Database, index_dir: str,
     @app.route("/index", methods=["GET"])
     def get_index():
         """Download FAISS index + labels as a tar-like bundle."""
-        index_path = Path(index_dir)
+        index_path = Path(index_dir).resolve()
         which = request.args.get("file", "index.faiss")
         file_path = index_path / which
         if not file_path.exists():
             return jsonify({"error": f"File not found: {which}"}), 404
-        return send_file(str(file_path), as_attachment=True)
+        return send_file(str(file_path.resolve()), as_attachment=True)
 
     @app.route("/task", methods=["GET"])
     def get_task():
