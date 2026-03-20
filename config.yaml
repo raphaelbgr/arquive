@@ -5,7 +5,7 @@ faces_dir: "./recognition/faces"
 
 # Media directories to scan (local or network paths)
 media_dirs:
-  - "F:/Raphael/Backups/Raphael/Google Takeout"
+  - "F:/Raphael/Backups/Raphael"
   - "H:/"
   # - "\\\\192.168.7.102\\Shared\\Media"
 
