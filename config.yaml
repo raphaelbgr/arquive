@@ -16,10 +16,15 @@ skip_processed: true
 exclude_dirs:
   - "Link to media folder"
   - "Live Photos - Videos under 5s"
+  - "Locked Folder"
+  - "Moved by mistake"
   - ".metadata"
   - "exiftool"
   - "ffmpeg"
   - "$RECYCLE.BIN"
+  - "System Volume Information"
+  - "Recovery"
+  - "DRIVERS Samsung"
 
 # Recognition settings
 recognition:
