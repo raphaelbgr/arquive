@@ -12,6 +12,15 @@ media_dirs:
 # Skip files already processed in previous runs
 skip_processed: true
 
+# Exclude these folder names from scanning (junctions/symlinks don't work over SMB)
+exclude_dirs:
+  - "Link to media folder"
+  - "Live Photos - Videos under 5s"
+  - ".metadata"
+  - "exiftool"
+  - "ffmpeg"
+  - "$RECYCLE.BIN"
+
 # Recognition settings
 recognition:
   model: "buffalo_l"

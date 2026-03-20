@@ -63,6 +63,7 @@ class Config:
     faces_dir: str = "./recognition/faces"
     media_dirs: list = field(default_factory=list)
     skip_processed: bool = True
+    exclude_dirs: list = field(default_factory=list)
     recognition: RecognitionConfig = field(default_factory=RecognitionConfig)
     video: VideoConfig = field(default_factory=VideoConfig)
     coordinator: CoordinatorConfig = field(default_factory=CoordinatorConfig)
@@ -83,6 +84,7 @@ def load_config(config_path: str = None) -> Config:
     cfg.faces_dir = raw.get("faces_dir", cfg.faces_dir)
     cfg.media_dirs = raw.get("media_dirs", cfg.media_dirs)
     cfg.skip_processed = raw.get("skip_processed", True)
+    cfg.exclude_dirs = raw.get("exclude_dirs", [])
 
     if "recognition" in raw:
         r = raw["recognition"]

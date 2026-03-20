@@ -1,6 +1,7 @@
 """Task Scheduler — walks media directories and manages task queue."""
 
 import logging
+import os
 import threading
 import time
 from pathlib import Path, PureWindowsPath, PurePosixPath
@@ -77,31 +78,34 @@ class TaskScheduler:
                 continue
 
             log.info("Scanning: %s", media_dir)
-            for item in media_path.rglob("*"):
-                if not item.is_file():
-                    continue
-                suffix = item.suffix.lower()
-                if suffix in IMAGE_EXTENSIONS:
-                    file_type = "image"
-                elif suffix in VIDEO_EXTENSIONS:
-                    file_type = "video"
-                else:
-                    continue
+            exclude_set = set(self.config.exclude_dirs)
+            for root, dirs, files in os.walk(media_path):
+                # Prune excluded directories in-place (prevents descent)
+                dirs[:] = [d for d in dirs if d not in exclude_set]
+                for fname in files:
+                    item = Path(root) / fname
+                    suffix = item.suffix.lower()
+                    if suffix in IMAGE_EXTENSIONS:
+                        file_type = "image"
+                    elif suffix in VIDEO_EXTENSIONS:
+                        file_type = "video"
+                    else:
+                        continue
 
-                file_str = str(item)
+                    file_str = str(item)
 
-                # Skip already-processed files from previous runs
-                if self._is_processed and self._is_processed(file_str):
-                    skipped += 1
-                    continue
+                    # Skip already-processed files from previous runs
+                    if self._is_processed and self._is_processed(file_str):
+                        skipped += 1
+                        continue
 
-                locality = self._resolve_locality(file_str)
+                    locality = self._resolve_locality(file_str)
 
-                with self.lock:
-                    task = Task(self._next_id, file_str, file_type, locality)
-                    self.tasks[self._next_id] = task
-                    self._next_id += 1
-                    count += 1
+                    with self.lock:
+                        task = Task(self._next_id, file_str, file_type, locality)
+                        self.tasks[self._next_id] = task
+                        self._next_id += 1
+                        count += 1
 
             log.info("  Found %d new files so far (%d skipped as already processed)", count, skipped)
 
