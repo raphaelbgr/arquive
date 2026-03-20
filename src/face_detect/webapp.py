@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import re
+import urllib.request
+import urllib.error
 from datetime import datetime
 from pathlib import Path
 
@@ -14,9 +16,51 @@ from .database import Database
 
 log = logging.getLogger(__name__)
 
+# Cache for extract_date_from_path results (file_path -> iso date string)
+_date_cache: dict[str, str] = {}
 
-def extract_date_from_path(file_path: str) -> str:
-    """Try to extract a date from the file path or name."""
+_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.webp', '.heic'}
+_VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg'}
+
+
+def _extract_date_from_exif(file_path: str) -> str:
+    """Try to read date from image EXIF data. Returns ISO date or empty string."""
+    try:
+        from PIL import Image
+        img = Image.open(file_path)
+        exif = img.getexif()
+        if not exif:
+            return ""
+        # Tag 36867 = DateTimeOriginal, Tag 36868 = DateTimeDigitized, Tag 306 = DateTime
+        for tag_id in (36867, 36868, 306):
+            val = exif.get(tag_id)
+            if val and isinstance(val, str):
+                # EXIF date format: "YYYY:MM:DD HH:MM:SS"
+                dt = datetime.strptime(val.strip()[:10], "%Y:%m:%d")
+                return dt.strftime("%Y-%m-%d")
+    except Exception:
+        pass
+    return ""
+
+
+def _extract_date_from_file_creation(file_path: str) -> str:
+    """Get the file creation/birth date. Returns ISO date or empty string."""
+    try:
+        stat = os.stat(file_path)
+        # On Windows, st_ctime is creation time; on Unix it's metadata change time.
+        # Use st_birthtime if available (macOS), otherwise st_ctime.
+        ctime = getattr(stat, 'st_birthtime', None) or stat.st_ctime
+        dt = datetime.fromtimestamp(ctime)
+        # Only trust dates from 2000 onward
+        if dt.year >= 2000:
+            return dt.strftime("%Y-%m-%d")
+    except Exception:
+        pass
+    return ""
+
+
+def _extract_date_from_filename(file_path: str) -> str:
+    """Try to extract a date from the file path or name (original logic)."""
     name = Path(file_path).stem
     m = re.search(r'(20[012]\d)(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])', name)
     if m:
@@ -29,6 +73,37 @@ def extract_date_from_path(file_path: str) -> str:
         if re.match(r'^(19|20)\d{2}$', part):
             return f"{part}-01-01"
     return ""
+
+
+def extract_date_from_path(file_path: str) -> str:
+    """Extract a date from file metadata or path, with caching.
+
+    Priority:
+    1. EXIF DateTimeOriginal / DateTimeDigitized (images)
+    2. EXIF DateTime / CreateDate (images)
+    3. File creation date
+    4. Filename pattern (fallback)
+    """
+    if file_path in _date_cache:
+        return _date_cache[file_path]
+
+    result = ""
+    ext = Path(file_path).suffix.lower()
+
+    # 1 & 2: Try EXIF for images (handles DateTimeOriginal, DateTimeDigitized, DateTime)
+    if ext in _IMAGE_EXTENSIONS:
+        result = _extract_date_from_exif(file_path)
+
+    # 3: File creation date (for both images and videos if no EXIF date found)
+    if not result and os.path.isfile(file_path):
+        result = _extract_date_from_file_creation(file_path)
+
+    # 4: Filename pattern fallback
+    if not result:
+        result = _extract_date_from_filename(file_path)
+
+    _date_cache[file_path] = result
+    return result
 
 
 def create_webapp(config=None):
@@ -173,6 +248,34 @@ def create_webapp(config=None):
     def serve_video_thumb(filename):
         return send_from_directory(str(video_thumbs_dir), filename)
 
+    @app.route("/api/activity")
+    def api_activity():
+        # Check if coordinator scan is running
+        scan_running = False
+        scan_progress = None
+        try:
+            req = urllib.request.Request("http://localhost:8600/progress")
+            with urllib.request.urlopen(req, timeout=1) as resp:
+                data = json.loads(resp.read().decode())
+                scan_running = True
+                if isinstance(data, dict) and "done" in data and "total" in data:
+                    scan_progress = {"done": data["done"], "total": data["total"]}
+        except Exception:
+            scan_running = False
+            scan_progress = None
+
+        # Description generation progress
+        total_matches = db.conn.execute("SELECT COUNT(*) FROM matches").fetchone()[0]
+        described = db.conn.execute(
+            "SELECT COUNT(*) FROM matches WHERE description IS NOT NULL"
+        ).fetchone()[0]
+
+        return jsonify({
+            "scan_running": scan_running,
+            "scan_progress": scan_progress,
+            "describe_progress": {"done": described, "total": total_matches},
+        })
+
     @app.route("/file")
     def serve_file():
         path = request.args.get("path", "")
@@ -254,7 +357,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <a href="#" style="opacity:.4;pointer-events:none"><span class="icon">&#128202;</span> Analytics</a>
         <a href="#" style="opacity:.4;pointer-events:none"><span class="icon">&#9881;</span> Settings</a>
     </nav>
-    <div class="sidebar-footer">v0.1.0 &mdash; Local AI Face Recognition</div>
+    <div class="sidebar-footer" id="activity-status" style="line-height:1.6">
+        <div id="scan-status" style="color:#666">Scan: checking...</div>
+        <div id="desc-status" style="color:#666">Descriptions: ...</div>
+        <div style="margin-top:4px;color:#444">v0.1.0 &mdash; Local AI Face Recognition</div>
+    </div>
 </div>
 <div class="main">
     <div class="header">
@@ -274,7 +381,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <span class="lb-nav lb-prev">&#8249;</span>
     <span class="lb-nav lb-next">&#8250;</span>
     <img id="lb-img" src="" style="display:none">
-    <video id="lb-vid" controls style="display:none"></video>
+    <video id="lb-vid" controls loop style="display:none"></video>
     <div class="lb-info">
         <div class="lb-name" id="lb-name"></div>
         <div class="lb-path" id="lb-path"></div>
@@ -384,7 +491,7 @@ function openLB(idx){
     const imgEl=$('lb-img');const vidEl=$('lb-vid');
     if(isVideo){
         imgEl.style.display='none';vidEl.style.display='block';
-        vidEl.src='/file?path='+encodeURIComponent(m.file_path);
+        vidEl.src='/file?path='+encodeURIComponent(m.file_path);vidEl.loop=true;
         if(m.timestamp_start!=null)vidEl.currentTime=m.timestamp_start;
         vidEl.play().catch(()=>{});
     }else{
@@ -413,6 +520,22 @@ document.addEventListener('keydown',e=>{
     else if(e.key==='ArrowLeft')navLB(null,-1);
     else if(e.key==='ArrowRight')navLB(null,1);
 });
+
+async function loadActivity(){
+    try{
+        const d=await(await fetch('/api/activity')).json();
+        const scanEl=$('scan-status');const descEl=$('desc-status');
+        if(d.scan_running){
+            scanEl.style.color='#a5d6a7';
+            if(d.scan_progress){scanEl.textContent='\u25CF Scan: '+d.scan_progress.done+'/'+d.scan_progress.total}
+            else{scanEl.textContent='\u25CF Scan: running'}
+        }else{scanEl.style.color='#666';scanEl.textContent='\u25CB Scan: idle'}
+        const dp=d.describe_progress;
+        if(dp.done<dp.total){descEl.style.color='#ffcc80';descEl.textContent='Desc: '+dp.done+'/'+dp.total}
+        else{descEl.style.color='#a5d6a7';descEl.textContent='Desc: '+dp.done+'/'+dp.total+' \u2714'}
+    }catch(e){$('scan-status').textContent='\u25CB Scan: unknown';$('scan-status').style.color='#666'}
+}
+setInterval(loadActivity,5000);loadActivity();
 
 setInterval(loadStats,30000);
 loadStats();loadContent();
