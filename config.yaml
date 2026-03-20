@@ -80,3 +80,7 @@ output:
   thumbnails_dir: "./results/thumbs"
   json_path: "./results/results.json"
   html_path: "./results/report.html"
+
+# Persons to hide from HTML report (data still in DB, just not displayed)
+hide_persons:
+  - "Monique Ferreira"

@@ -69,6 +69,7 @@ class Config:
     coordinator: CoordinatorConfig = field(default_factory=CoordinatorConfig)
     workers: list = field(default_factory=list)
     output: OutputConfig = field(default_factory=OutputConfig)
+    hide_persons: list = field(default_factory=list)
 
 
 def load_config(config_path: str = None) -> Config:
@@ -85,6 +86,7 @@ def load_config(config_path: str = None) -> Config:
     cfg.media_dirs = raw.get("media_dirs", cfg.media_dirs)
     cfg.skip_processed = raw.get("skip_processed", True)
     cfg.exclude_dirs = raw.get("exclude_dirs", [])
+    cfg.hide_persons = raw.get("hide_persons", [])
 
     if "recognition" in raw:
         r = raw["recognition"]

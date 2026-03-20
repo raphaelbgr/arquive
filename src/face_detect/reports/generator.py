@@ -338,9 +338,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </html>"""
 
 
-def generate_html_report(db: Database, output_path: str, thumbnails_dir: str):
+def generate_html_report(db: Database, output_path: str, thumbnails_dir: str,
+                         hide_persons: list = None):
     """Generate an HTML report with thumbnails."""
     by_person = db.get_matches_by_person()
+    if hide_persons:
+        for name in hide_persons:
+            by_person.pop(name, None)
     stats = db.get_scan_stats()
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)

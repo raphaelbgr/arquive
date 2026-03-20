@@ -132,7 +132,8 @@ def cmd_scan(args):
         while True:
             time.sleep(60)
             try:
-                generate_html_report(db, config.output.html_path, config.output.thumbnails_dir)
+                generate_html_report(db, config.output.html_path, config.output.thumbnails_dir,
+                                 hide_persons=config.hide_persons)
             except Exception as e:
                 log.warning("Report generation failed: %s", e)
 
@@ -172,7 +173,8 @@ def cmd_scan(args):
     print(cli_report)
 
     generate_json_report(db, config.output.json_path)
-    generate_html_report(db, config.output.html_path, config.output.thumbnails_dir)
+    generate_html_report(db, config.output.html_path, config.output.thumbnails_dir,
+                                 hide_persons=config.hide_persons)
     print(f"\nJSON report: {config.output.json_path}")
     print(f"HTML report: {config.output.html_path}")
 
@@ -227,7 +229,8 @@ def cmd_report(args):
 
     if fmt in ("html", "all"):
         out = args.output or config.output.html_path
-        generate_html_report(db, out, config.output.thumbnails_dir)
+        generate_html_report(db, out, config.output.thumbnails_dir,
+                             hide_persons=config.hide_persons)
         print(f"HTML report: {out}")
 
     db.close()
