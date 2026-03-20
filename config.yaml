@@ -66,8 +66,8 @@ workers:
     gpu: "coreml"
     locality_paths: []
     path_map:
-      "F:/": "/Volumes/Trunk 2 - 3TB drive/"
-      "H:/": "/Volumes/Trunk 4 - 8TB drive/"
+      "F:/": "/Users/rbgnr/mnt/trunk2/"
+      "H:/": "/Users/rbgnr/mnt/trunk4/"
 
 # Output settings
 output:

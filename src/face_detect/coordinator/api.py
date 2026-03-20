@@ -91,10 +91,11 @@ def create_api(scheduler: TaskScheduler, db: Database, index_dir: str,
 
         # Update scan progress
         progress = scheduler.get_progress()
-        matched_count = db.conn.execute(
-            "SELECT COUNT(DISTINCT file_path) FROM matches WHERE scan_job_id=?",
-            (scan_job_id,)
-        ).fetchone()[0]
+        with db._lock:
+            matched_count = db.conn.execute(
+                "SELECT COUNT(DISTINCT file_path) FROM matches WHERE scan_job_id=?",
+                (scan_job_id,)
+            ).fetchone()[0]
         db.update_scan_progress(
             scan_job_id, progress["done"], matched_count, progress["failed"]
         )

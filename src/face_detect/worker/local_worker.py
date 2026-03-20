@@ -235,10 +235,11 @@ class LocalWorker:
             self.db.add_matches_batch(db_matches)
 
         progress = self.scheduler.get_progress()
-        matched_count = self.db.conn.execute(
-            "SELECT COUNT(DISTINCT file_path) FROM matches WHERE scan_job_id=?",
-            (self.scan_job_id,)
-        ).fetchone()[0]
+        with self.db._lock:
+            matched_count = self.db.conn.execute(
+                "SELECT COUNT(DISTINCT file_path) FROM matches WHERE scan_job_id=?",
+                (self.scan_job_id,)
+            ).fetchone()[0]
         self.db.update_scan_progress(
             self.scan_job_id, progress["done"], matched_count, progress["failed"]
         )
