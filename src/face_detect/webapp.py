@@ -102,11 +102,18 @@ def create_webapp(config=None):
         matches = []
         for r in rows:
             fp = r[1]
+            thumb = Path(r[6]).name if r[6] else None
+            # Check for video frame thumbnail
+            vthumb = None
+            if r[2] == "video" and r[4] is not None:
+                vt_name = f"{Path(fp).stem}_{r[4]:.1f}s.jpg"
+                if (video_thumbs_dir / vt_name).exists():
+                    vthumb = vt_name
             matches.append({
                 "person_name": r[0], "file_path": fp, "file_name": Path(fp).name,
                 "file_type": r[2], "confidence": r[3],
                 "timestamp_start": r[4], "timestamp_end": r[5],
-                "thumbnail": Path(r[6]).name if r[6] else None,
+                "thumbnail": thumb, "video_thumb": vthumb,
                 "description": r[7], "date": extract_date_from_path(fp),
             })
 
@@ -137,11 +144,17 @@ def create_webapp(config=None):
             date_str = extract_date_from_path(fp) or "Unknown Date"
             if date_str not in by_date:
                 by_date[date_str] = []
+            thumb = Path(r[6]).name if r[6] else None
+            vthumb = None
+            if r[2] == "video" and r[4] is not None:
+                vt_name = f"{Path(fp).stem}_{r[4]:.1f}s.jpg"
+                if (video_thumbs_dir / vt_name).exists():
+                    vthumb = vt_name
             by_date[date_str].append({
                 "person_name": r[0], "file_path": fp, "file_name": Path(fp).name,
                 "file_type": r[2], "confidence": r[3],
                 "timestamp_start": r[4], "timestamp_end": r[5],
-                "thumbnail": Path(r[6]).name if r[6] else None,
+                "thumbnail": thumb, "video_thumb": vthumb,
                 "description": r[7],
             })
 
@@ -150,9 +163,15 @@ def create_webapp(config=None):
                   for d in sorted_dates]
         return jsonify({"groups": result, "total_dates": len(result)})
 
+    video_thumbs_dir = (Path(config.output.thumbnails_dir) / ".." / "video_thumbs").resolve()
+
     @app.route("/thumb/<path:filename>")
     def serve_thumb(filename):
         return send_from_directory(str(thumbs_dir), filename)
+
+    @app.route("/vthumb/<path:filename>")
+    def serve_video_thumb(filename):
+        return send_from_directory(str(video_thumbs_dir), filename)
 
     @app.route("/file")
     def serve_file():
@@ -202,6 +221,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .card .type-badge{position:absolute;top:6px;left:6px;padding:2px 6px;border-radius:3px;font-size:.6rem;font-weight:700;text-transform:uppercase}
 .card .type-badge.video{background:#e65100;color:#fff}
 .card .type-badge.image{background:#004d40;color:#80cbc4}
+.card .play-overlay{position:absolute;top:50%;left:50%;transform:translate(-50%,-70%);width:44px;height:44px;background:rgba(0,0,0,.6);border-radius:50%;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.card .play-overlay:after{content:'';border-style:solid;border-width:10px 0 10px 18px;border-color:transparent transparent transparent #fff;margin-left:3px}
 .card .time-badge{position:absolute;top:6px;right:6px;padding:2px 6px;border-radius:3px;font-size:.6rem;background:rgba(0,0,0,.7);color:#ccc}
 .card .info{padding:.5rem;font-size:.75rem}
 .card .info .name{color:#ccc;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -296,8 +317,13 @@ function formatDate(iso){
 function makeCard(m,idx){
     const card=document.createElement('div');card.className='card';card.dataset.idx=idx;
     const isVideo=m.file_type==='video';
-    if(m.thumbnail){const img=document.createElement('img');img.loading='lazy';img.src='/thumb/'+m.thumbnail;card.appendChild(img)}
-    else{const d=document.createElement('div');d.className='no-thumb';d.textContent=isVideo?'Video':'No thumbnail';card.appendChild(d)}
+    if(m.thumbnail){
+        const img=document.createElement('img');img.loading='lazy';
+        if(isVideo&&m.video_thumb){img.src='/vthumb/'+m.video_thumb}
+        else{img.src='/thumb/'+m.thumbnail}
+        card.appendChild(img);
+    }else{const d=document.createElement('div');d.className='no-thumb';d.textContent=isVideo?'Video':'No thumbnail';card.appendChild(d)}
+    if(isVideo){const po=document.createElement('div');po.className='play-overlay';card.appendChild(po)}
     const tb=document.createElement('span');tb.className='type-badge '+(isVideo?'video':'image');tb.textContent=isVideo?'VIDEO':'IMAGE';card.appendChild(tb);
     if(isVideo&&m.timestamp_start!=null){
         const tm=document.createElement('span');tm.className='time-badge';
