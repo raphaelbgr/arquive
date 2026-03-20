@@ -63,8 +63,8 @@ workers:
     gpu: "cuda"
     locality_paths: []
     path_map:
-      "F:/": "Z:/"
-      "H:/": "Y:/"
+      "F:/": "//192.168.7.101/Trunk 2 - 3TB drive/"
+      "H:/": "//192.168.7.101/Trunk 4 - 8TB drive/"
   - name: "mac-mini"
     host: "192.168.7.102"
     ssh_alias: "mac-mini"

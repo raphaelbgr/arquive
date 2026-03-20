@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS matches (
     timestamp_end REAL,
     thumbnail_path TEXT,
     file_hash TEXT,
+    description TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (scan_job_id) REFERENCES scan_jobs(id)
 );
@@ -160,10 +161,19 @@ class Database:
         ).fetchone()
         return row is not None
 
+    def update_description(self, file_path: str, person_name: str, description: str):
+        """Update the description for a match."""
+        with self._lock:
+            self.conn.execute(
+                "UPDATE matches SET description=? WHERE file_path=? AND person_name=?",
+                (description, file_path, person_name)
+            )
+            self.conn.commit()
+
     def get_all_matches(self) -> list:
         rows = self.conn.execute(
             """SELECT person_name, file_path, file_type, confidence,
-                      timestamp_start, timestamp_end, thumbnail_path
+                      timestamp_start, timestamp_end, thumbnail_path, description
                FROM matches ORDER BY person_name, file_path, timestamp_start"""
         ).fetchall()
         return [dict(r) for r in rows]

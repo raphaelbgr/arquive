@@ -157,6 +157,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .type-video { background: #1a237e; color: #9fa8da; }
         .type-image { background: #004d40; color: #80cbc4; }
         .summary { margin-bottom: 0.5rem; color: #aaa; font-size: 0.9rem; }
+        .ai-desc {
+            margin-top: 0.5rem; padding: 0.5rem; background: #1a1a1a;
+            border-left: 2px solid #4fc3f7; border-radius: 4px;
+            font-size: 0.75rem; color: #999; line-height: 1.4;
+            max-height: 80px; overflow-y: auto;
+        }
 
         /* Lightbox overlay */
         .lightbox {
@@ -204,6 +210,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="lb-info">
             <div id="lb-filename"></div>
             <div class="lb-path" id="lb-path"></div>
+            <div id="lb-desc" style="margin-top:0.5rem;max-width:70vw;font-size:0.8rem;color:#aaa;line-height:1.4;max-height:100px;overflow-y:auto;"></div>
         </div>
     </div>
 
@@ -227,7 +234,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <div class="match-item" onclick="openLightbox(this)"
                  data-src="{{ match.file_path | file_uri }}"
                  data-filename="{{ match.file_path | basename }}"
-                 data-fullpath="{{ match.file_path }}">
+                 data-fullpath="{{ match.file_path }}"
+                 data-desc="{{ match.description or '' }}">
                 {% if match.thumbnail_path and thumb_exists(match.thumbnail_path) %}
                 <img loading="lazy" src="{{ thumb_rel(match.thumbnail_path) }}" alt="{{ person_name }}">
                 {% else %}
@@ -249,6 +257,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                         <span class="confidence {{ 'conf-high' if match.confidence >= 0.5 else 'conf-mid' if match.confidence >= 0.4 else 'conf-low' }}">
                             {{ "%.1f%%" | format(match.confidence * 100) }}
                         </span>
+                        {% if match.description %}
+                        <div class="ai-desc">{{ match.description }}</div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -287,6 +298,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         img.src = item.dataset.src;
         fname.textContent = item.dataset.filename;
         fpath.textContent = item.dataset.fullpath;
+        document.getElementById('lb-desc').textContent = item.dataset.desc || '';
         lb.classList.add('active');
         document.body.style.overflow = 'hidden';
     }
