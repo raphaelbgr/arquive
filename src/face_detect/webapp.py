@@ -172,62 +172,88 @@ APP_HTML = r"""<!DOCTYPE html>
 <title>Face Detection Dashboard</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f0f0f;color:#e0e0e0}
-.header{padding:1.5rem 2rem;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center}
-.header h1{font-size:1.5rem;color:#fff}
-.stats-bar{display:flex;gap:2rem;font-size:.85rem;color:#888}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f0f0f;color:#e0e0e0;display:flex;height:100vh;overflow:hidden}
+.sidebar{width:220px;min-width:220px;background:#111;border-right:1px solid #222;display:flex;flex-direction:column;height:100vh}
+.sidebar .logo{padding:1.2rem 1rem;font-size:1.1rem;font-weight:700;color:#fff;border-bottom:1px solid #222}
+.sidebar nav{flex:1;padding:.5rem 0}
+.sidebar nav a{display:flex;align-items:center;gap:.6rem;padding:.7rem 1rem;color:#888;text-decoration:none;font-size:.85rem;border-left:3px solid transparent;transition:all .15s}
+.sidebar nav a:hover{color:#ccc;background:#1a1a1a}
+.sidebar nav a.active{color:#4fc3f7;border-left-color:#4fc3f7;background:#1a1a2a}
+.sidebar nav a .icon{font-size:1.1rem;width:20px;text-align:center}
+.sidebar .sidebar-footer{padding:.8rem 1rem;border-top:1px solid #222;font-size:.7rem;color:#444}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.header{padding:1rem 1.5rem;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center}
+.header h1{font-size:1.3rem;color:#fff}
+.stats-bar{display:flex;gap:1.5rem;font-size:.8rem;color:#888}
 .stats-bar span.val{color:#4fc3f7;font-weight:600}
-.controls{padding:1rem 2rem;display:flex;gap:1rem;align-items:center;border-bottom:1px solid #1a1a1a}
-.controls select,.controls button{background:#1a1a1a;color:#e0e0e0;border:1px solid #333;padding:.4rem .8rem;border-radius:6px;cursor:pointer;font-size:.85rem}
+.controls{padding:.7rem 1.5rem;display:flex;gap:.8rem;align-items:center;border-bottom:1px solid #1a1a1a}
+.controls select,.controls button{background:#1a1a1a;color:#e0e0e0;border:1px solid #333;padding:.35rem .7rem;border-radius:6px;cursor:pointer;font-size:.8rem}
 .controls button:hover{border-color:#4fc3f7}
 .controls button.active{background:#4fc3f7;color:#000;border-color:#4fc3f7}
-.date-group{padding:0 2rem}
-.date-title{padding:1rem 0 .5rem;color:#4fc3f7;font-size:1.1rem;font-weight:600;border-bottom:1px solid #222;margin-bottom:.75rem;position:sticky;top:0;background:#0f0f0f;z-index:10}
-.date-title .count{color:#666;font-size:.8rem;font-weight:400;margin-left:.5rem}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.75rem;padding-bottom:1rem}
-.card{background:#1a1a1a;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a;cursor:pointer;transition:border-color .2s}
+.scroll-area{flex:1;overflow-y:auto;overflow-x:hidden}
+.date-group{padding:0 1.5rem}
+.date-title{padding:.8rem 0 .4rem;color:#4fc3f7;font-size:1rem;font-weight:600;border-bottom:1px solid #222;margin-bottom:.6rem;position:sticky;top:0;background:#0f0f0f;z-index:10}
+.date-title .count{color:#666;font-size:.75rem;font-weight:400;margin-left:.5rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem;padding-bottom:.8rem}
+.card{background:#1a1a1a;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a;cursor:pointer;transition:border-color .2s;position:relative}
 .card:hover{border-color:#4fc3f7}
-.card img{width:100%;height:160px;object-fit:cover;background:#111}
-.card .no-thumb{width:100%;height:160px;background:#111;display:flex;align-items:center;justify-content:center;color:#444;font-size:.75rem}
-.card .info{padding:.6rem;font-size:.8rem}
+.card img,.card video{width:100%;height:150px;object-fit:cover;background:#111}
+.card .no-thumb{width:100%;height:150px;background:#111;display:flex;align-items:center;justify-content:center;color:#444;font-size:.75rem}
+.card .type-badge{position:absolute;top:6px;left:6px;padding:2px 6px;border-radius:3px;font-size:.6rem;font-weight:700;text-transform:uppercase}
+.card .type-badge.video{background:#e65100;color:#fff}
+.card .type-badge.image{background:#004d40;color:#80cbc4}
+.card .time-badge{position:absolute;top:6px;right:6px;padding:2px 6px;border-radius:3px;font-size:.6rem;background:rgba(0,0,0,.7);color:#ccc}
+.card .info{padding:.5rem;font-size:.75rem}
 .card .info .name{color:#ccc;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card .info .meta{color:#666;font-size:.7rem;margin-top:.2rem}
-.card .info .desc{color:#888;font-size:.7rem;margin-top:.3rem;line-height:1.3;max-height:40px;overflow:hidden}
-.badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:.65rem;font-weight:600}
+.card .info .meta{color:#666;font-size:.65rem;margin-top:.15rem}
+.card .info .desc{color:#888;font-size:.65rem;margin-top:.2rem;line-height:1.3;max-height:36px;overflow:hidden}
+.badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:.6rem;font-weight:600}
 .badge-person{background:#1a237e;color:#9fa8da}
 .conf-high{color:#a5d6a7}.conf-mid{color:#ffcc80}.conf-low{color:#ef9a9a}
 .lightbox{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.95);z-index:1000;justify-content:center;align-items:center;flex-direction:column}
 .lightbox.active{display:flex}
-.lightbox img{max-width:92vw;max-height:75vh;object-fit:contain;border-radius:8px}
-.lightbox .lb-info{color:#ccc;margin-top:1rem;text-align:center;max-width:80vw}
-.lightbox .lb-info .lb-name{font-size:.9rem}
-.lightbox .lb-info .lb-path{color:#666;font-size:.75rem;margin-top:.2rem;word-break:break-all}
-.lightbox .lb-info .lb-desc{color:#999;font-size:.8rem;margin-top:.5rem;max-height:80px;overflow-y:auto;line-height:1.4}
-.lightbox .lb-close{position:absolute;top:1.5rem;right:2rem;color:#888;font-size:2rem;cursor:pointer}
+.lightbox img,.lightbox video{max-width:90vw;max-height:72vh;object-fit:contain;border-radius:8px}
+.lightbox .lb-info{color:#ccc;margin-top:.8rem;text-align:center;max-width:75vw}
+.lightbox .lb-info .lb-name{font-size:.85rem}
+.lightbox .lb-info .lb-path{color:#666;font-size:.7rem;margin-top:.2rem;word-break:break-all}
+.lightbox .lb-info .lb-desc{color:#999;font-size:.75rem;margin-top:.4rem;max-height:70px;overflow-y:auto;line-height:1.4}
+.lightbox .lb-close{position:absolute;top:1.2rem;right:1.5rem;color:#888;font-size:2rem;cursor:pointer}
 .lightbox .lb-close:hover{color:#fff}
-.lb-nav{position:absolute;top:50%;transform:translateY(-50%);color:#555;font-size:3rem;cursor:pointer;user-select:none;padding:0 1.5rem}
+.lb-nav{position:absolute;top:50%;transform:translateY(-50%);color:#555;font-size:3rem;cursor:pointer;user-select:none;padding:0 1.2rem}
 .lb-nav:hover{color:#fff}
 .lb-prev{left:0}.lb-next{right:0}
 .loading{text-align:center;padding:3rem;color:#666}
 </style>
 </head>
 <body>
-<div class="header">
-    <h1>Face Detection Dashboard</h1>
-    <div class="stats-bar" id="stats"></div>
+<div class="sidebar">
+    <div class="logo">FaceDetect</div>
+    <nav>
+        <a href="#" class="active"><span class="icon">&#128100;</span> People</a>
+        <a href="#" style="opacity:.4;pointer-events:none"><span class="icon">&#128202;</span> Analytics</a>
+        <a href="#" style="opacity:.4;pointer-events:none"><span class="icon">&#9881;</span> Settings</a>
+    </nav>
+    <div class="sidebar-footer">v0.1.0 &mdash; Local AI Face Recognition</div>
 </div>
-<div class="controls">
-    <select id="personFilter"></select>
-    <button id="btnByDate" class="active">By Date</button>
-    <button id="btnByConf">By Confidence</button>
-    <span id="totalCount" style="color:#666;font-size:.85rem;margin-left:auto"></span>
+<div class="main">
+    <div class="header">
+        <h1>People</h1>
+        <div class="stats-bar" id="stats"></div>
+    </div>
+    <div class="controls">
+        <select id="personFilter"></select>
+        <button id="btnByDate" class="active">By Date</button>
+        <button id="btnByConf">By Confidence</button>
+        <span id="totalCount" style="color:#666;font-size:.8rem;margin-left:auto"></span>
+    </div>
+    <div class="scroll-area" id="content"></div>
 </div>
-<div id="content"></div>
 <div class="lightbox" id="lightbox">
     <span class="lb-close">&times;</span>
     <span class="lb-nav lb-prev">&#8249;</span>
     <span class="lb-nav lb-next">&#8250;</span>
-    <img id="lb-img" src="">
+    <img id="lb-img" src="" style="display:none">
+    <video id="lb-vid" controls style="display:none"></video>
     <div class="lb-info">
         <div class="lb-name" id="lb-name"></div>
         <div class="lb-path" id="lb-path"></div>
@@ -238,10 +264,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 let view='date',currentPerson='',allCards=[],lbIdx=-1;
 const $=id=>document.getElementById(id);
 
+function fmtTime(s){if(s==null)return'';const m=Math.floor(s/60),sec=Math.floor(s%60);return m+':'+String(sec).padStart(2,'0')}
+
 async function loadStats(){
     const d=await(await fetch('/api/stats')).json();
-    const s=d.stats;
-    const el=$('stats');
+    const s=d.stats;const el=$('stats');
     while(el.firstChild)el.removeChild(el.firstChild);
     const items=['Scanned: '+(s.processed_files||0),'Matches: '+(s.matched_files||0),'Described: '+d.descriptions_done];
     d.persons.forEach(p=>items.push(p.name+': '+p.count));
@@ -249,10 +276,10 @@ async function loadStats(){
         if(i>0){const sp=document.createElement('span');sp.textContent=' | ';el.appendChild(sp)}
         const sp=document.createElement('span');sp.className='val';sp.textContent=t;el.appendChild(sp);
     });
-    const sel=$('personFilter');
+    const sel=$('personFilter');const prev=sel.value;
     while(sel.firstChild)sel.removeChild(sel.firstChild);
     const opt0=document.createElement('option');opt0.value='';opt0.textContent='All Persons';sel.appendChild(opt0);
-    d.persons.forEach(p=>{const o=document.createElement('option');o.value=p.name;o.textContent=p.name+' ('+p.count+')';sel.appendChild(o)});
+    d.persons.forEach(p=>{const o=document.createElement('option');o.value=p.name;o.textContent=p.name+' ('+p.count+')';if(p.name===prev)o.selected=true;sel.appendChild(o)});
 }
 
 function setView(v){view=v;$('btnByDate').className=v==='date'?'active':'';$('btnByConf').className=v==='confidence'?'active':'';loadContent()}
@@ -268,8 +295,15 @@ function formatDate(iso){
 
 function makeCard(m,idx){
     const card=document.createElement('div');card.className='card';card.dataset.idx=idx;
+    const isVideo=m.file_type==='video';
     if(m.thumbnail){const img=document.createElement('img');img.loading='lazy';img.src='/thumb/'+m.thumbnail;card.appendChild(img)}
-    else{const d=document.createElement('div');d.className='no-thumb';d.textContent='No thumbnail';card.appendChild(d)}
+    else{const d=document.createElement('div');d.className='no-thumb';d.textContent=isVideo?'Video':'No thumbnail';card.appendChild(d)}
+    const tb=document.createElement('span');tb.className='type-badge '+(isVideo?'video':'image');tb.textContent=isVideo?'VIDEO':'IMAGE';card.appendChild(tb);
+    if(isVideo&&m.timestamp_start!=null){
+        const tm=document.createElement('span');tm.className='time-badge';
+        tm.textContent=fmtTime(m.timestamp_start)+(m.timestamp_end!=null?' - '+fmtTime(m.timestamp_end):'');
+        card.appendChild(tm);
+    }
     const info=document.createElement('div');info.className='info';
     const nm=document.createElement('div');nm.className='name';nm.textContent=m.file_name;info.appendChild(nm);
     const meta=document.createElement('div');meta.className='meta';
@@ -278,7 +312,7 @@ function makeCard(m,idx){
     conf.className=m.confidence>=.5?'conf-high':m.confidence>=.4?'conf-mid':'conf-low';
     conf.textContent=' '+(m.confidence*100).toFixed(1)+'%';meta.appendChild(conf);
     info.appendChild(meta);
-    if(m.description){const desc=document.createElement('div');desc.className='desc';desc.textContent=m.description.substring(0,120)+'...';info.appendChild(desc)}
+    if(m.description){const desc=document.createElement('div');desc.className='desc';desc.textContent=m.description.substring(0,100)+'...';info.appendChild(desc)}
     card.appendChild(info);
     card.onclick=()=>openLB(idx);
     return card;
@@ -298,7 +332,7 @@ async function loadByDate(el){
         const grp=document.createElement('div');grp.className='date-group';
         const title=document.createElement('div');title.className='date-title';
         title.textContent=formatDate(g.date);
-        const cnt=document.createElement('span');cnt.className='count';cnt.textContent=g.count+' photo(s)';title.appendChild(cnt);
+        const cnt=document.createElement('span');cnt.className='count';cnt.textContent=g.count+' item(s)';title.appendChild(cnt);
         grp.appendChild(title);
         const grid=document.createElement('div');grid.className='grid';
         g.matches.forEach(m=>{const idx=allCards.length;allCards.push(m);grid.appendChild(makeCard(m,idx));totalM++});
@@ -320,15 +354,26 @@ async function loadByConf(el){
 
 function openLB(idx){
     lbIdx=idx;const m=allCards[idx];
-    $('lb-img').src='/file?path='+encodeURIComponent(m.file_path);
-    $('lb-name').textContent=m.file_name+' \u2014 '+m.person_name;
+    const isVideo=m.file_type==='video';
+    const imgEl=$('lb-img');const vidEl=$('lb-vid');
+    if(isVideo){
+        imgEl.style.display='none';vidEl.style.display='block';
+        vidEl.src='/file?path='+encodeURIComponent(m.file_path);
+        if(m.timestamp_start!=null)vidEl.currentTime=m.timestamp_start;
+        vidEl.play().catch(()=>{});
+    }else{
+        vidEl.style.display='none';vidEl.pause();vidEl.src='';
+        imgEl.style.display='block';imgEl.src='/file?path='+encodeURIComponent(m.file_path);
+    }
+    $('lb-name').textContent=m.file_name+' \u2014 '+m.person_name+(isVideo&&m.timestamp_start!=null?' ['+fmtTime(m.timestamp_start)+' - '+fmtTime(m.timestamp_end)+']':'');
     $('lb-path').textContent=m.file_path;
     $('lb-desc').textContent=m.description||'';
     $('lightbox').classList.add('active');document.body.style.overflow='hidden';
 }
 function closeLB(e){
-    if(e&&(e.target.classList.contains('lb-nav')||e.target.id==='lb-img'))return;
+    if(e&&(e.target.classList.contains('lb-nav')||e.target.id==='lb-img'||e.target.id==='lb-vid'))return;
     $('lightbox').classList.remove('active');document.body.style.overflow='';lbIdx=-1;
+    $('lb-vid').pause();$('lb-vid').src='';
 }
 function navLB(e,dir){e&&e.stopPropagation();const n=lbIdx+dir;if(n>=0&&n<allCards.length)openLB(n)}
 
