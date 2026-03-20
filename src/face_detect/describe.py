@@ -227,6 +227,16 @@ def run_batch_describe(db_path: str, output_dir: str = "./results",
             failed += 1
             continue
 
+        # Skip files without image extensions (UUIDs, etc.)
+        suffix = Path(local_path).suffix.lower()
+        if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif"}:
+            log.debug("Skipping non-image: %s", local_path)
+            skipped += 1
+            continue
+
+        log.info("Describing [%d/%d]: %s", described + skipped + failed + 1, total,
+                 Path(local_path).name)
+
         # Generate description
         desc = describe_image(model, processor, local_path)
 
@@ -294,13 +304,16 @@ if __name__ == "__main__":
                         help="HuggingFace model name")
     parser.add_argument("--quantize", default="none", choices=["4bit", "8bit", "none"],
                         help="Quantization mode (use 'none' for Mac M4)")
-    parser.add_argument("--path-prefix-from", help="Coordinator path prefix to replace")
-    parser.add_argument("--path-prefix-to", help="Local path prefix replacement")
+    parser.add_argument("--path-map", nargs="*", metavar="FROM=TO",
+                        help="Path mappings, e.g. 'F:/=/Users/rbgnr/mnt/trunk2/' 'H:/=/Users/rbgnr/mnt/trunk4/'")
     args = parser.parse_args()
 
     path_map = {}
-    if args.path_prefix_from and args.path_prefix_to:
-        path_map[args.path_prefix_from] = args.path_prefix_to
+    if args.path_map:
+        for mapping in args.path_map:
+            if "=" in mapping:
+                frm, to = mapping.split("=", 1)
+                path_map[frm] = to
 
     run_batch_describe(
         db_path=args.db,
