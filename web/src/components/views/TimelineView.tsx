@@ -5,6 +5,8 @@ import { api } from '../../api/client';
 import { MediaCard } from '../media/MediaCard';
 import { MediaViewer } from '../media/MediaViewer';
 import { FileInfoPanel } from '../media/FileInfoPanel';
+import { FilterBar, filtersToParams } from '../media/FilterBar';
+import type { Filters } from '../media/FilterBar';
 
 interface MonthGroup {
   month: string;
@@ -52,6 +54,7 @@ export function TimelineView() {
   const [loadingBatch, setLoadingBatch] = useState(false);
   const [viewerFile, setViewerFile] = useState<{ file: MediaFile; allFiles: MediaFile[]; index: number } | null>(null);
   const [infoFile, setInfoFile] = useState<MediaFile | null>(null);
+  const [activeFilters, setActiveFilters] = useState<Filters>({});
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Multi-select state
@@ -125,27 +128,34 @@ export function TimelineView() {
       .finally(() => setLoadingMonths(false));
   }, []);
 
+  const activeFiltersRef = useRef(activeFilters);
+  activeFiltersRef.current = activeFilters;
+
   const loadMonthsBatch = useCallback((months: string[]) => {
     const toLoad = months.filter(m => !sections.has(m));
     if (toLoad.length === 0) return;
     setLoadingBatch(true);
 
-    fetchMonthsBatch(toLoad, INITIAL_PER_MONTH)
+    const filterParams = filtersToParams(activeFiltersRef.current);
+
+    // Use individual API calls so filters work (batch API doesn't support filters yet)
+    Promise.all(toLoad.map(month =>
+      api.media.list({ month, limit: INITIAL_PER_MONTH, page: 1, ...filterParams })
+        .then(res => ({ month, items: res.items ?? [], total: res.total }))
+        .catch(() => ({ month, items: [] as MediaFile[], total: 0 }))
+    ))
       .then(results => {
         setSections(prev => {
           const next = new Map(prev);
-          for (const month of toLoad) {
-            const data = results[month];
-            if (data) {
-              next.set(month, {
-                month,
-                totalCount: data.total,
-                files: data.items ?? [],
-                page: 1,
-                loadingMore: false,
-                fullyLoaded: (data.items ?? []).length >= data.total,
-              });
-            }
+          for (const data of results) {
+            next.set(data.month, {
+              month: data.month,
+              totalCount: data.total,
+              files: data.items,
+              page: 1,
+              loadingMore: false,
+              fullyLoaded: data.items.length >= data.total,
+            });
           }
           return next;
         });
@@ -172,10 +182,12 @@ export function TimelineView() {
       return next;
     });
 
-    // Call API with explicit offset instead of page number
-    fetch(`/api/v1/media?month=${encodeURIComponent(month)}&limit=${LOAD_MORE_BATCH}&page=1&offset=${currentOffset}`, {
-      credentials: 'include',
-    })
+    // Call API with explicit offset and active filters
+    const fp = new URLSearchParams({
+      month, limit: String(LOAD_MORE_BATCH), page: '1', offset: String(currentOffset),
+      ...Object.fromEntries(Object.entries(filtersToParams(activeFiltersRef.current)).map(([k, v]) => [k, String(v)])),
+    });
+    fetch(`/api/v1/media?${fp}`, { credentials: 'include' })
       .then(r => r.json())
       .then((res: { items?: MediaFile[]; total?: number }) => {
         const newFiles = res.items ?? [];
@@ -275,6 +287,20 @@ export function TimelineView() {
 
       {/* Continuous scroll content */}
       <div ref={scrollRef} className="relative flex-1 overflow-y-auto p-4" onScroll={handleScroll}>
+        {/* Filter bar */}
+        <FilterBar
+          filters={activeFilters}
+          onChange={(f) => {
+            setActiveFilters(f);
+            // Reset and reload with filters
+            setSections(new Map());
+            // Reload first 3 months with new filters
+            if (groups.length > 0) {
+              loadMonthsBatch(groups.slice(0, 3).map(g => g.month));
+            }
+          }}
+        />
+
         {/* Floating selection action bar */}
         <AnimatePresence>
           {selectionMode && selectedIds.size > 0 && (

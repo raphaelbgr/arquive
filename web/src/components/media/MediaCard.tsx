@@ -86,14 +86,26 @@ export function MediaCard({ file, onClick, onInfo, isSelected, onSelect, selecti
   const spriteRequested = useRef(false);
   const { ref, isIntersecting } = useIntersectionObserver({ triggerOnce: true, rootMargin: '200px' });
 
-  const imageUrl = getImageUrl(file);
-  const typeInfo = getTypeInfo(file);
+  const [fileMeta, setFileMeta] = useState(file);
+  const imageUrl = getImageUrl(fileMeta);
+  const typeInfo = getTypeInfo(fileMeta);
+  const metaRequested = useRef(false);
+
+  // Lazy metadata fetch — when card is visible and file has no dimensions, fetch detail to trigger extraction
+  useEffect(() => {
+    if (isIntersecting && !fileMeta.width && !metaRequested.current) {
+      metaRequested.current = true;
+      fetch(`/api/v1/media/${file.id}`, { credentials: 'include' })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data && data.width) setFileMeta(data); })
+        .catch(() => {});
+    }
+  }, [isIntersecting, fileMeta.width, file.id]);
 
   // Fetch sprite sheet when card becomes visible for videos — only once per card lifetime
   useEffect(() => {
-    if (isIntersecting && isVideo(file) && !spriteRequested.current) {
+    if (isIntersecting && isVideo(fileMeta) && !spriteRequested.current) {
       spriteRequested.current = true;
-      // Only fetch sprite if already cached (don't trigger on-demand generation from grid)
       fetch(`/api/v1/media/${file.id}/sprite/meta?cached_only=1`, { credentials: 'include' })
         .then(r => r.ok ? r.json() : null)
         .then(data => { if (data && data.spriteUrl) setSpriteData(data); })
@@ -127,7 +139,7 @@ export function MediaCard({ file, onClick, onInfo, isSelected, onSelect, selecti
   return (
     <motion.div
       ref={ref}
-      className={`group relative glass-card overflow-hidden cursor-pointer transition-all ${
+      className={`group relative glass-card cursor-pointer transition-all ${
         isSelected
           ? 'ring-2 ring-[var(--accent-color)] scale-[1.03]'
           : selectionMode
@@ -141,7 +153,7 @@ export function MediaCard({ file, onClick, onInfo, isSelected, onSelect, selecti
       transition={{ duration: 0.2, ease: 'easeOut' }}
     >
       {/* Thumbnail area */}
-      <div className="relative aspect-video overflow-hidden bg-black">
+      <div className="relative aspect-video overflow-hidden bg-black rounded-t-2xl">
         {/* Sprite cycling overlay for videos — auto-plays when visible */}
         {spriteData && (
           <div className="absolute inset-0 z-10">

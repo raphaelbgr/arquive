@@ -99,10 +99,10 @@ export function MediaViewer({ file, isOpen, onClose, onPrev, onNext }: MediaView
         </button>
       )}
 
-      {/* Content */}
-      <div className="h-full w-full pt-12 pb-2">
+      {/* Content — key forces remount on file change for clean transitions */}
+      <div className="h-full w-full pt-12 pb-2" key={file.id}>
         {viewerType === 'video' && <VideoPlayer src={fileUrl} autoplay />}
-        {viewerType === 'image' && <ImageViewer src={fileUrl} alt={file.name} onClose={close} onPrev={onPrev} onNext={onNext} />}
+        {viewerType === 'image' && <ImageViewer src={fileUrl} alt={file.name} />}
         {viewerType === 'document' && <DocumentViewer src={fileUrl} />}
         {viewerType === 'audio' && <AudioPlayer src={fileUrl} title={file.name} duration={file.duration ?? undefined} />}
         {viewerType === 'unknown' && (

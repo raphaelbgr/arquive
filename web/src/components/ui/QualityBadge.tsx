@@ -65,6 +65,10 @@ const BADGE_STYLES = {
   // 'VR':       { color: '#00e5ff', bg: 'rgba(0, 229, 255, 0.15)' },
   // '3D':       { color: '#76ff03', bg: 'rgba(118, 255, 3, 0.15)' },
 
+  // Orientation
+  'H':          { color: '#78909c', bg: 'rgba(120, 144, 156, 0.15)' },
+  'V':          { color: '#78909c', bg: 'rgba(120, 144, 156, 0.15)' },
+
   'default':    { color: '#90a4ae', bg: 'rgba(144, 164, 174, 0.12)' },
 } as const;
 
@@ -101,6 +105,13 @@ export function getFpsBadge(framerate: number | null | undefined): string | null
   if (framerate >= 29) return '30fps';
   if (framerate >= 23) return '24fps';
   return null;
+}
+
+export function getOrientationBadge(width: number | null, height: number | null): string | null {
+  if (!width || !height) return null;
+  if (width > height) return 'H';
+  if (height > width) return 'V';
+  return null; // square — no badge
 }
 
 // ============================================
@@ -149,6 +160,9 @@ export function MediaBadges({ width, height, codec, framerate, size = 'xs' }: {
 
   const fps = getFpsBadge(framerate);
   if (fps) badges.push(fps);
+
+  const orient = getOrientationBadge(width ?? null, height ?? null);
+  if (orient) badges.push(orient);
 
   if (badges.length === 0) return null;
 

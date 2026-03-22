@@ -415,6 +415,61 @@ PREVIEW_TILES_DEFAULTS = {
 }
 
 
+def _lazy_extract_metadata(db: Database, f: dict) -> None:
+    """Extract and store width/height/codec for a file on first access."""
+    path = f["path"]
+    mime = (f.get("mime_type") or "").lower()
+    updates: dict = {}
+
+    try:
+        if mime.startswith("image/"):
+            from PIL import Image, ImageOps
+            if path.lower().endswith((".heic", ".heif")):
+                from pillow_heif import register_heif_opener
+                register_heif_opener()
+            img = Image.open(path)
+            img = ImageOps.exif_transpose(img)
+            updates["width"] = img.width
+            updates["height"] = img.height
+
+        elif mime.startswith("video/") or mime.startswith("audio/"):
+            import subprocess
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=width,height,codec_name,r_frame_rate",
+                 "-show_entries", "format=duration",
+                 "-of", "json", path],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                info = json.loads(result.stdout)
+                streams = info.get("streams", [])
+                if streams:
+                    s = streams[0]
+                    updates["width"] = s.get("width")
+                    updates["height"] = s.get("height")
+                    fps_str = s.get("r_frame_rate", "0/1")
+                    fps = None
+                    if "/" in str(fps_str):
+                        n, d = fps_str.split("/")
+                        fps = round(float(n) / float(d), 2) if float(d) else None
+                    updates["metadata_json"] = json.dumps({
+                        "codec": s.get("codec_name"),
+                        "framerate": fps,
+                    })
+                fmt = info.get("format", {})
+                if fmt.get("duration"):
+                    updates["duration"] = float(fmt["duration"])
+    except Exception:
+        return
+
+    if updates:
+        with db._lock:
+            sets = ", ".join(f"{k} = ?" for k in updates)
+            db.conn.execute(f"UPDATE files SET {sets} WHERE id = ?", (*updates.values(), f["id"]))
+            db.conn.commit()
+
+
 def create_app(config: Any, db: Database, auth: Any, cache: Any) -> Flask:
     """Create the full Arquive Flask application.
 
@@ -585,6 +640,62 @@ def create_app(config: Any, db: Database, auth: Any, cache: Any) -> Flask:
                         params.append(f"{prefix}/%")
                     where_parts.append(f"({' OR '.join(mime_clauses)})")
 
+            # --- Stackable filters ---
+
+            # Resolution filter: sd, hd, fullhd, 2k, 4k, 8k, 16k
+            res_filter = request.args.get("resolution")
+            if res_filter:
+                res_map = {
+                    "sd": "height < 720",
+                    "480p": "height >= 480 AND height < 720",
+                    "hd": "height >= 720 AND height < 1080",
+                    "fullhd": "height >= 1080 AND height < 1440",
+                    "2k": "height >= 1440 AND height < 2160",
+                    "4k": "height >= 2160 AND height < 4320",
+                    "8k": "height >= 4320 AND height < 8640",
+                    "16k": "height >= 8640",
+                }
+                clause = res_map.get(res_filter.lower())
+                if clause:
+                    where_parts.append(f"({clause})")
+
+            # Orientation filter: h (horizontal), v (vertical)
+            orient = request.args.get("orientation")
+            if orient == "h":
+                where_parts.append("width > height")
+            elif orient == "v":
+                where_parts.append("height > width")
+
+            # File size filter: min_size, max_size (in bytes)
+            min_size = request.args.get("min_size", type=int)
+            max_size = request.args.get("max_size", type=int)
+            if min_size is not None:
+                where_parts.append("size >= ?")
+                params.append(min_size)
+            if max_size is not None:
+                where_parts.append("size <= ?")
+                params.append(max_size)
+
+            # Date range filter: date_from, date_to (ISO format)
+            date_from = request.args.get("date_from")
+            date_to = request.args.get("date_to")
+            if date_from:
+                where_parts.append("modified_at >= ?")
+                params.append(date_from)
+            if date_to:
+                where_parts.append("modified_at <= ?")
+                params.append(date_to)
+
+            # Codec filter (requires metadata_json)
+            codec_filter = request.args.get("codec")
+            if codec_filter:
+                where_parts.append("metadata_json LIKE ?")
+                params.append(f'%"codec": "{codec_filter}"%')
+
+            # Has dimensions (metadata extracted)
+            if request.args.get("has_dimensions") == "1":
+                where_parts.append("width IS NOT NULL AND height IS NOT NULL")
+
             where = " AND ".join(where_parts)
             rows = db.conn.execute(
                 f"SELECT * FROM files WHERE {where} ORDER BY modified_at DESC LIMIT ? OFFSET ?",
@@ -607,6 +718,12 @@ def create_app(config: Any, db: Database, auth: Any, cache: Any) -> Flask:
         f = db.get_file_by_id(media_id)
         if not f:
             return jsonify({"error": "Not found"}), 404
+
+        # Lazy metadata extraction — fill in width/height/codec on first access
+        if f.get("width") is None and os.path.exists(f["path"]):
+            _lazy_extract_metadata(db, f)
+            f = db.get_file_by_id(media_id) or f
+
         return jsonify(f)
 
     @app.route("/api/v1/media/<int:media_id>", methods=["DELETE"])
@@ -693,11 +810,38 @@ def create_app(config: Any, db: Database, auth: Any, cache: Any) -> Flask:
                             os.remove(tmp)
 
                 if poster_path.exists():
-                    # Update DB so we don't regenerate next time
+                    # Extract video metadata (dimensions, codec, fps) while we have ffprobe
+                    update_fields = {"thumbnail_path": str(poster_path)}
+                    try:
+                        meta_r = subprocess.run(
+                            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                             "-show_entries", "stream=width,height,codec_name,r_frame_rate",
+                             "-of", "json", file_path],
+                            capture_output=True, text=True, timeout=10,
+                        )
+                        if meta_r.returncode == 0:
+                            streams = json.loads(meta_r.stdout).get("streams", [])
+                            if streams:
+                                s = streams[0]
+                                fps_str = s.get("r_frame_rate", "0/1")
+                                fps = None
+                                if "/" in str(fps_str):
+                                    n, d = fps_str.split("/")
+                                    fps = round(float(n) / float(d), 2) if float(d) else None
+                                update_fields["width"] = s.get("width")
+                                update_fields["height"] = s.get("height")
+                                update_fields["duration"] = duration
+                                update_fields["metadata_json"] = json.dumps({
+                                    "codec": s.get("codec_name"),
+                                    "framerate": fps,
+                                })
+                    except Exception:
+                        pass
                     with db._lock:
+                        sets = ", ".join(f"{k} = ?" for k in update_fields)
                         db.conn.execute(
-                            "UPDATE files SET thumbnail_path = ? WHERE id = ?",
-                            (str(poster_path), media_id),
+                            f"UPDATE files SET {sets} WHERE id = ?",
+                            (*update_fields.values(), media_id),
                         )
                         db.conn.commit()
                     resp = make_response(send_file(str(poster_path)))
@@ -709,6 +853,9 @@ def create_app(config: Any, db: Database, auth: Any, cache: Any) -> Flask:
         # For images without thumbnails, redirect to file endpoint with resize
         if mime.startswith("image/") and os.path.exists(file_path):
             from flask import redirect
+            # Also extract image dimensions while we're at it
+            if f.get("width") is None:
+                _lazy_extract_metadata(db, f)
             return redirect(f"/file?path={file_path}&w=320")
 
         return jsonify({"error": "No thumbnail available"}), 404
@@ -773,6 +920,40 @@ def create_app(config: Any, db: Database, auth: Any, cache: Any) -> Flask:
             "total_size": row["total_size"],
             "extension_count": row["ext_count"],
         })
+
+    @app.route("/api/v1/media/filter-counts")
+    def api_media_filter_counts():
+        """Return counts for each filter option — used to populate filter chips."""
+        counts: dict = {}
+        # Media type counts
+        for label, prefix in [("images", "image"), ("videos", "video"), ("audio", "audio")]:
+            r = db.conn.execute("SELECT COUNT(*) FROM files WHERE mime_type LIKE ?", (f"{prefix}/%",)).fetchone()
+            counts[label] = r[0]
+        r = db.conn.execute("SELECT COUNT(*) FROM files WHERE extension IN ('.pdf','.doc','.docx','.xls','.xlsx','.ppt','.pptx','.txt','.rtf')").fetchone()
+        counts["documents"] = r[0]
+
+        # Orientation (only for files with dimensions)
+        counts["horizontal"] = db.conn.execute("SELECT COUNT(*) FROM files WHERE width > height").fetchone()[0]
+        counts["vertical"] = db.conn.execute("SELECT COUNT(*) FROM files WHERE height > width").fetchone()[0]
+
+        # Resolution tiers (only for files with height)
+        for label, clause in [
+            ("sd", "height < 720"),
+            ("hd", "height >= 720 AND height < 1080"),
+            ("fullhd", "height >= 1080 AND height < 1440"),
+            ("2k", "height >= 1440 AND height < 2160"),
+            ("4k", "height >= 2160 AND height < 4320"),
+            ("8k", "height >= 4320"),
+        ]:
+            r = db.conn.execute(f"SELECT COUNT(*) FROM files WHERE {clause}").fetchone()
+            counts[label] = r[0]
+
+        # Size ranges
+        counts["small"] = db.conn.execute("SELECT COUNT(*) FROM files WHERE size < 1048576").fetchone()[0]  # < 1MB
+        counts["medium"] = db.conn.execute("SELECT COUNT(*) FROM files WHERE size >= 1048576 AND size < 104857600").fetchone()[0]  # 1-100MB
+        counts["large"] = db.conn.execute("SELECT COUNT(*) FROM files WHERE size >= 104857600").fetchone()[0]  # > 100MB
+
+        return jsonify(counts)
 
     @app.route("/api/v1/media/timeline")
     def api_media_timeline():
@@ -1421,6 +1602,15 @@ def create_app(config: Any, db: Database, auth: Any, cache: Any) -> Flask:
     @app.route("/sprites/<path:filename>")
     def serve_sprites(filename: str):
         return send_from_directory(str(cache.sprites_dir), filename)
+
+    # SPA catch-all: serve React index.html for any unmatched route
+    @app.errorhandler(404)
+    def spa_fallback(e: Any):
+        if web_dist.exists() and (web_dist / "index.html").exists():
+            resp = make_response(send_from_directory(str(web_dist), "index.html"))
+            resp.headers["Cache-Control"] = "no-cache"
+            return resp
+        return jsonify({"error": "Not found"}), 404
 
     return app
 
