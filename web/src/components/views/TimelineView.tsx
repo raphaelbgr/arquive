@@ -35,18 +35,6 @@ function formatMonth(m: string): string {
   }
 }
 
-/** Batch-fetch multiple months in one request */
-async function fetchMonthsBatch(months: string[], limit: number): Promise<Record<string, { items: MediaFile[]; total: number }>> {
-  const resp = await fetch('/api/v1/media/batch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ months, limit }),
-  });
-  if (!resp.ok) throw new Error('Batch fetch failed');
-  return resp.json();
-}
-
 export function TimelineView() {
   const [groups, setGroups] = useState<MonthGroup[]>([]);
   const [sections, setSections] = useState<Map<string, MonthSection>>(new Map());
