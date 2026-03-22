@@ -1,12 +1,160 @@
-"""Generate full-frame video thumbnails for matched videos."""
+"""Generate full-frame video thumbnails and sprite sheets for video preview tiles.
 
+Existing function ``generate_video_thumbnails`` is unchanged.  New functions
+added for Arquive sprite sheet generation via FFmpeg subprocess.
+
+Dependencies: cv2 (OpenCV), subprocess (FFmpeg)
+"""
+
+from __future__ import annotations
+
+import json
 import logging
 import sqlite3
+import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Sprite sheet generation (Step 10 — Arquive extension)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SpriteConfig:
+    frame_width: int = 160
+    frame_height: int = 90
+    columns: int = 5
+    max_frames: int = 20
+
+
+def _get_video_duration(video_path: str) -> float:
+    """Get video duration in seconds via ffprobe."""
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            video_path,
+        ],
+        capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffprobe failed: {result.stderr}")
+    return float(result.stdout.strip())
+
+
+def generate_sprite_sheet(
+    video_path: str,
+    output_dir: str,
+    config: SpriteConfig | None = None,
+) -> dict:
+    """Generate a sprite sheet and poster for a video file.
+
+    Extracts evenly-spaced frames via FFmpeg and composites them into a
+    grid image.  Returns sprite metadata dict.
+    """
+    if config is None:
+        config = SpriteConfig()
+
+    out = Path(output_dir) / "sprites"
+    out.mkdir(parents=True, exist_ok=True)
+
+    video_hash = Path(video_path).stem  # TODO: use proper content hash
+    sprite_path = out / f"{video_hash}_sprite.jpg"
+    poster_path = out / f"{video_hash}_poster.jpg"
+    meta_path = out / f"{video_hash}_sprite.json"
+
+    # Skip if already generated
+    if sprite_path.exists() and poster_path.exists():
+        if meta_path.exists():
+            return json.loads(meta_path.read_text())
+
+    duration = _get_video_duration(video_path)
+    if duration <= 0:
+        raise ValueError(f"Invalid duration for {video_path}")
+
+    interval = max(1, int(duration / config.max_frames))
+    total_frames = min(config.max_frames, max(1, int(duration / interval)))
+    rows = -(-total_frames // config.columns)  # ceil division
+
+    # Generate sprite sheet
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-hwaccel", "cuda", "-i", video_path,
+            "-vf", (
+                f"fps=1/{interval},"
+                f"scale={config.frame_width}:{config.frame_height},"
+                f"tile={config.columns}x{rows}"
+            ),
+            "-frames:v", "1", "-q:v", "5",
+            str(sprite_path),
+        ],
+        capture_output=True, timeout=120,
+    )
+
+    # Generate poster (first frame)
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-hwaccel", "cuda", "-i", video_path,
+            "-vframes", "1", "-q:v", "2",
+            "-vf", f"scale={config.frame_width}:{config.frame_height}",
+            str(poster_path),
+        ],
+        capture_output=True, timeout=30,
+    )
+
+    metadata = {
+        "spriteUrl": f"/sprites/{video_hash}_sprite.jpg",
+        "posterUrl": f"/sprites/{video_hash}_poster.jpg",
+        "frameWidth": config.frame_width,
+        "frameHeight": config.frame_height,
+        "columns": config.columns,
+        "rows": rows,
+        "totalFrames": total_frames,
+        "intervalSeconds": interval,
+        "duration": duration,
+    }
+
+    meta_path.write_text(json.dumps(metadata, indent=2))
+    log.info("Sprite sheet generated: %s (%d frames)", sprite_path, total_frames)
+    return metadata
+
+
+def compose_live_sprite(
+    thumbnail_paths: list[str],
+    output_path: str,
+    frame_width: int = 160,
+    frame_height: int = 90,
+    columns: int = 5,
+) -> None:
+    """Composite individual frame captures into a single sprite sheet.
+
+    Called on a 60-second timer to refresh live channel preview tiles.
+    Uses Pillow for image compositing.
+    """
+    from PIL import Image
+
+    rows = -(-len(thumbnail_paths) // columns)
+    sheet = Image.new("RGB", (frame_width * columns, frame_height * rows), (0, 0, 0))
+
+    for i, thumb_path in enumerate(thumbnail_paths):
+        col = i % columns
+        row = i // columns
+        frame = Image.open(thumb_path).resize((frame_width, frame_height))
+        sheet.paste(frame, (col * frame_width, row * frame_height))
+
+    sheet.save(output_path, "JPEG", quality=80)
+    log.info("Live sprite sheet generated: %s (%d frames)", output_path, len(thumbnail_paths))
+
+
+# ---------------------------------------------------------------------------
+# Original video thumbnail generation (unchanged)
+# ---------------------------------------------------------------------------
 
 
 def generate_video_thumbnails(db_path: str, output_dir: str, size: tuple = (320, 180)):

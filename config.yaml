@@ -84,3 +84,63 @@ output:
 # Persons to hide from HTML report (data still in DB, just not displayed)
 hide_persons:
   - "Monique Ferreira"
+
+# ===================================================================
+# Arquive extensions
+# ===================================================================
+
+# Server settings
+server:
+  host: "0.0.0.0"
+  port: 64531
+
+# Authentication
+auth:
+  sec_level: "simple-password"  # simple-password | user-account | forever
+  session_duration: "365d"
+
+# Transcode cache
+cache:
+  enabled: true
+  directory: ""  # empty = OS temp directory
+  limit_gb: 20.0
+  preload_seconds: 20
+
+# GPU transcoding fleet (extends existing workers)
+transcode:
+  gpu_busy_threshold: 80
+  poll_interval_seconds: 5
+  encoders:
+    desktop:
+      encoder: nvenc
+      health_check: "nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader"
+      priority: 1
+    avell:
+      encoder: nvenc
+      health_check: "nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader"
+      priority: 2
+    mac-mini:
+      encoder: videotoolbox
+      health_check: "powermetrics --samplers gpu_power -n 1 -i 100"
+      priority: 3
+
+# AI descriptions (Qwen2.5-VL on Mac Mini M4 via Ollama)
+ai:
+  model: "qwen2.5-vl"
+  endpoint: "http://mac-mini:11434/api/generate"
+  enabled: true
+  batch_size: 50
+  describe_videos: true
+  keyframe_count: 5
+
+# IPTV / Live TV
+iptv:
+  enabled: true
+  recording_dir: "F:/Recordings"
+  epg_refresh_hours: 12
+  playlist_refresh_hours: 24
+
+# DLNA / UPnP server
+dlna:
+  enabled: false
+  friendly_name: "Arquive Media Server"

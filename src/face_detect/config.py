@@ -1,4 +1,14 @@
-"""Configuration loader for face-detect."""
+"""Configuration loader for face-detect / Arquive.
+
+Loads a YAML config file into typed dataclasses.  Existing sections
+(recognition, video, coordinator, workers, output) are unchanged.
+New Arquive sections (cache, auth, iptv, dlna, transcode, ai, server)
+are added alongside them — missing sections get sensible defaults.
+
+Dependencies: pyyaml
+"""
+
+from __future__ import annotations
 
 import os
 from pathlib import Path
@@ -17,6 +27,8 @@ THRESHOLD_PRESETS = {
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif"}
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".wmv", ".flv"}
+AUDIO_EXTENSIONS = {".mp3", ".flac", ".wav", ".aac", ".ogg", ".wma", ".m4a", ".opus"}
+DOCUMENT_EXTENSIONS = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt"}
 
 
 @dataclass
@@ -59,7 +71,67 @@ class OutputConfig:
 
 
 @dataclass
+class CacheConfig:
+    """Transcode / thumbnail cache settings."""
+    enabled: bool = True
+    directory: str = ""  # empty = OS temp directory
+    limit_gb: float = 20.0
+    preload_seconds: int = 20  # first N seconds pre-encoded per video
+
+
+@dataclass
+class AuthConfig:
+    """Authentication settings."""
+    sec_level: str = "simple-password"  # simple-password | user-account | forever
+    session_duration: str = "365d"
+    jwt_secret: str = ""  # auto-generated on first run if empty
+
+
+@dataclass
+class ServerConfig:
+    """Arquive HTTP server settings."""
+    host: str = "0.0.0.0"
+    port: int = 64531
+
+
+@dataclass
+class TranscodeConfig:
+    """GPU fleet transcoding settings."""
+    gpu_busy_threshold: int = 80
+    poll_interval_seconds: int = 5
+    encoders: dict = field(default_factory=dict)  # node_name -> {encoder, health_check, priority}
+
+
+@dataclass
+class AIConfig:
+    """AI description generation settings."""
+    model: str = "qwen2.5-vl"
+    endpoint: str = "http://mac-mini:11434/api/generate"
+    enabled: bool = True
+    batch_size: int = 50
+    describe_videos: bool = True
+    keyframe_count: int = 5
+
+
+@dataclass
+class IPTVConfig:
+    """IPTV / Live TV settings."""
+    enabled: bool = True
+    recording_dir: str = ""
+    epg_refresh_hours: int = 12
+    playlist_refresh_hours: int = 24
+
+
+@dataclass
+class DLNAConfig:
+    """DLNA/UPnP server settings."""
+    enabled: bool = False
+    friendly_name: str = "Arquive Media Server"
+
+
+@dataclass
 class Config:
+    # --- Existing sections (unchanged) ---
     faces_dir: str = "./recognition/faces"
     media_dirs: list = field(default_factory=list)
     skip_processed: bool = True
@@ -70,6 +142,14 @@ class Config:
     workers: list = field(default_factory=list)
     output: OutputConfig = field(default_factory=OutputConfig)
     hide_persons: list = field(default_factory=list)
+    # --- New Arquive sections ---
+    cache: CacheConfig = field(default_factory=CacheConfig)
+    auth: AuthConfig = field(default_factory=AuthConfig)
+    server: ServerConfig = field(default_factory=ServerConfig)
+    transcode: TranscodeConfig = field(default_factory=TranscodeConfig)
+    ai: AIConfig = field(default_factory=AIConfig)
+    iptv: IPTVConfig = field(default_factory=IPTVConfig)
+    dlna: DLNAConfig = field(default_factory=DLNAConfig)
 
 
 def load_config(config_path: str = None) -> Config:
@@ -131,6 +211,67 @@ def load_config(config_path: str = None) -> Config:
             thumbnails_dir=o.get("thumbnails_dir", cfg.output.thumbnails_dir),
             json_path=o.get("json_path", cfg.output.json_path),
             html_path=o.get("html_path", cfg.output.html_path),
+        )
+
+    # --- New Arquive sections ---
+
+    if "cache" in raw:
+        c = raw["cache"]
+        cfg.cache = CacheConfig(
+            enabled=c.get("enabled", True),
+            directory=c.get("directory", ""),
+            limit_gb=c.get("limit_gb", 20.0),
+            preload_seconds=c.get("preload_seconds", 20),
+        )
+
+    if "auth" in raw:
+        a = raw["auth"]
+        cfg.auth = AuthConfig(
+            sec_level=a.get("sec_level", "simple-password"),
+            session_duration=a.get("session_duration", "365d"),
+            jwt_secret=a.get("jwt_secret", ""),
+        )
+
+    if "server" in raw:
+        s = raw["server"]
+        cfg.server = ServerConfig(
+            host=s.get("host", "0.0.0.0"),
+            port=s.get("port", 64531),
+        )
+
+    if "transcode" in raw:
+        t = raw["transcode"]
+        cfg.transcode = TranscodeConfig(
+            gpu_busy_threshold=t.get("gpu_busy_threshold", 80),
+            poll_interval_seconds=t.get("poll_interval_seconds", 5),
+            encoders=t.get("encoders", {}),
+        )
+
+    if "ai" in raw:
+        ai = raw["ai"]
+        cfg.ai = AIConfig(
+            model=ai.get("model", "qwen2.5-vl"),
+            endpoint=ai.get("endpoint", "http://mac-mini:11434/api/generate"),
+            enabled=ai.get("enabled", True),
+            batch_size=ai.get("batch_size", 50),
+            describe_videos=ai.get("describe_videos", True),
+            keyframe_count=ai.get("keyframe_count", 5),
+        )
+
+    if "iptv" in raw:
+        i = raw["iptv"]
+        cfg.iptv = IPTVConfig(
+            enabled=i.get("enabled", True),
+            recording_dir=i.get("recording_dir", ""),
+            epg_refresh_hours=i.get("epg_refresh_hours", 12),
+            playlist_refresh_hours=i.get("playlist_refresh_hours", 24),
+        )
+
+    if "dlna" in raw:
+        d = raw["dlna"]
+        cfg.dlna = DLNAConfig(
+            enabled=d.get("enabled", False),
+            friendly_name=d.get("friendly_name", "Arquive Media Server"),
         )
 
     return cfg

@@ -1,4 +1,14 @@
-"""CLI entry point for face-detect."""
+"""CLI entry point for face-detect / Arquive.
+
+Extends the original face-detect CLI with new Arquive commands (serve,
+cache, fleet, iptv, user, set-password, sessions, describe) while
+keeping all existing commands (index, scan, worker, report, status)
+fully intact.
+
+Dependencies: argparse (stdlib), plus lazy imports for each command
+"""
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -254,14 +264,254 @@ def cmd_status(args):
         print(f"Error contacting coordinator: {e}")
 
 
+# ===================================================================
+# New Arquive commands
+# ===================================================================
+
+def cmd_serve(args):
+    """Start the full Arquive server (Flask + auth + cache + background scanner)."""
+    config = load_config(args.config)
+    if args.port:
+        config.server.port = args.port
+    if args.host:
+        config.server.host = args.host
+    if args.sec_level:
+        config.auth.sec_level = args.sec_level
+    if args.cache_dir:
+        config.cache.directory = args.cache_dir
+    if args.cache_limit:
+        config.cache.limit_gb = args.cache_limit
+
+    db = Database(config.output.db_path)
+
+    deduped = db.deduplicate_files()
+    if deduped:
+        log.info("Removed %d duplicate file entries", deduped)
+
+    from .auth import AuthManager
+    auth = AuthManager(db, config)
+
+    # In simple-password mode, generate a password if none exists
+    if config.auth.sec_level == "simple-password":
+        generated = auth.get_or_create_password()
+        if generated:
+            print(f"\n  Generated server password: {generated}")
+            print(f"  (change with: face-detect set-password <new-password>)\n")
+
+    from .cache_manager import CacheManager
+    cache = CacheManager(
+        cache_dir=config.cache.directory,
+        limit_bytes=int(config.cache.limit_gb * 1024**3),
+    )
+
+    # Auto-create libraries from media_dirs if none exist
+    if not db.get_libraries() and config.media_dirs:
+        for media_dir in config.media_dirs:
+            name = Path(media_dir).name or media_dir
+            db.add_library(name, "local", media_dir)
+            log.info("Auto-created library: %s -> %s", name, media_dir)
+
+    # Background media scanner — indexes files from all libraries on startup
+    def _background_scanner():
+        time.sleep(2)  # Let Flask start first
+        from .sources.local import LocalSource
+        libraries = db.get_libraries()
+        for lib in libraries:
+            if not lib["enabled"]:
+                continue
+            if lib["type"] == "local":
+                try:
+                    source = LocalSource(
+                        library_id=lib["id"],
+                        path=lib["path"],
+                        db=db,
+                        exclude_dirs=set(config.exclude_dirs),
+                    )
+                    count = source.scan()
+                    log.info("Library '%s' scanned: %d files", lib["name"], count)
+                except Exception:
+                    log.exception("Failed to scan library '%s'", lib["name"])
+
+    scanner_thread = threading.Thread(target=_background_scanner, daemon=True)
+    scanner_thread.start()
+
+    from .webapp import create_app
+    app = create_app(config, db, auth, cache)
+
+    print(f"\n  Arquive server starting on http://{config.server.host}:{config.server.port}")
+    print(f"  Auth mode: {config.auth.sec_level}")
+    print(f"  Cache: {cache.cache_dir} (limit {config.cache.limit_gb} GB)")
+    print(f"  Libraries: {len(db.get_libraries())} configured\n")
+
+    app.run(
+        host=config.server.host,
+        port=config.server.port,
+        debug=False,
+        use_reloader=False,
+    )
+
+
+def cmd_set_password(args):
+    """Set or change the server password."""
+    config = load_config(args.config)
+    db = Database(config.output.db_path)
+    from .auth import AuthManager
+    auth = AuthManager(db, config)
+    auth.set_password(args.password)
+    print("Password updated.")
+    db.close()
+
+
+def cmd_user(args):
+    """Manage user accounts."""
+    config = load_config(args.config)
+    db = Database(config.output.db_path)
+    from .auth import AuthManager
+    auth = AuthManager(db, config)
+
+    if args.user_action == "add":
+        role = args.role or "user"
+        import getpass
+        password = getpass.getpass(f"Password for {args.username}: ")
+        auth.create_user(args.username, password, role)
+        print(f"User '{args.username}' created with role '{role}'.")
+    elif args.user_action == "list":
+        users = db.get_users()
+        if not users:
+            print("No users.")
+        for u in users:
+            print(f"  {u['username']}  role={u['role']}  created={u['created_at']}")
+    elif args.user_action == "remove":
+        if db.remove_user(args.username):
+            print(f"User '{args.username}' removed.")
+        else:
+            print(f"User '{args.username}' not found.")
+    db.close()
+
+
+def cmd_sessions(args):
+    """Revoke all active sessions."""
+    config = load_config(args.config)
+    db = Database(config.output.db_path)
+    from .auth import AuthManager
+    auth = AuthManager(db, config)
+    auth.revoke_all_sessions()
+    print("All sessions revoked.")
+    db.close()
+
+
+def cmd_cache(args):
+    """Cache management commands."""
+    config = load_config(args.config)
+
+    from .cache_manager import CacheManager
+    cache = CacheManager(
+        cache_dir=config.cache.directory,
+        limit_bytes=int(config.cache.limit_gb * 1024**3),
+    )
+
+    if args.cache_action == "clear":
+        freed = cache.clear()
+        print(f"Cache cleared: {freed / 1024**2:.1f} MB freed")
+    elif args.cache_action == "stats":
+        stats = cache.stats()
+        print(f"  Location:  {stats['cache_dir']}")
+        print(f"  Enabled:   {stats['enabled']}")
+        print(f"  Used:      {stats['used_bytes'] / 1024**3:.2f} GB / {stats['limit_bytes'] / 1024**3:.1f} GB ({stats['used_pct']}%)")
+        print(f"  Segments:  {stats['segment_count']}")
+    cache.close()
+
+
+def cmd_fleet(args):
+    """GPU fleet management."""
+    config = load_config(args.config)
+
+    if args.fleet_action == "test":
+        import subprocess
+        for worker in config.workers:
+            if not worker.ssh_alias:
+                print(f"  {worker.name}: localhost (local)")
+                continue
+            try:
+                result = subprocess.run(
+                    ["ssh", worker.ssh_alias, "echo", "ok"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                status = "OK" if result.returncode == 0 else f"FAIL: {result.stderr.strip()}"
+            except subprocess.TimeoutExpired:
+                status = "TIMEOUT"
+            except Exception as e:
+                status = f"ERROR: {e}"
+            print(f"  {worker.name} ({worker.ssh_alias}): {status}")
+
+
+def cmd_iptv(args):
+    """IPTV management commands."""
+    config = load_config(args.config)
+    db = Database(config.output.db_path)
+
+    if args.iptv_action == "add":
+        from .iptv.playlist_manager import PlaylistManager
+        pm = PlaylistManager(db)
+        playlist_id = pm.add_playlist(args.url, name=args.name)
+        print(f"Playlist added (id={playlist_id}). Refreshing...")
+        pm.refresh_playlist(playlist_id)
+        print("Done.")
+    elif args.iptv_action == "list":
+        rows = db.conn.execute(
+            "SELECT id, name, channel_count, status, last_refreshed FROM iptv_playlists ORDER BY name"
+        ).fetchall()
+        if not rows:
+            print("No playlists configured.")
+        for r in rows:
+            print(f"  [{r['id']}] {r['name']}  channels={r['channel_count']}  status={r['status']}  refreshed={r['last_refreshed']}")
+    elif args.iptv_action == "refresh":
+        from .iptv.playlist_manager import PlaylistManager
+        pm = PlaylistManager(db)
+        rows = db.conn.execute("SELECT id FROM iptv_playlists").fetchall()
+        for r in rows:
+            pm.refresh_playlist(r["id"])
+        print(f"Refreshed {len(rows)} playlists.")
+    elif args.iptv_action == "epg-add":
+        db.conn.execute(
+            "INSERT OR IGNORE INTO epg_sources (url, name) VALUES (?, ?)",
+            (args.url, args.name or args.url),
+        )
+        db.conn.commit()
+        print(f"EPG source added: {args.url}")
+    elif args.iptv_action == "epg-refresh":
+        from .iptv.epg_service import EPGService
+        epg = EPGService(db)
+        epg.refresh_all()
+        print("EPG data refreshed.")
+
+    db.close()
+
+
+def cmd_describe(args):
+    """Run AI descriptions on files."""
+    config = load_config(args.config)
+    from .describe import generate_description
+    target = args.path or "."
+    print(f"Generating AI descriptions for: {target}")
+    # Delegate to existing describe module
+    generate_description(target, config)
+
+
+# ===================================================================
+# Argument parser
+# ===================================================================
+
 def main():
     parser = argparse.ArgumentParser(
         prog="face-detect",
-        description="Distributed face recognition across media archives",
+        description="Arquive — personal media archive with face detection & live TV",
     )
     parser.add_argument("-c", "--config", default="config.yaml", help="Config file path")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    # --- Existing commands (unchanged) ---
 
     # index
     p_index = sub.add_parser("index", help="Build FAISS index from reference faces")
@@ -295,6 +545,64 @@ def main():
     p_status = sub.add_parser("status", help="Show scan progress")
     p_status.add_argument("--coordinator", help="Coordinator URL")
 
+    # --- New Arquive commands ---
+
+    # serve
+    p_serve = sub.add_parser("serve", help="Start full Arquive server")
+    p_serve.add_argument("--port", type=int, help="Server port (default: 64531)")
+    p_serve.add_argument("--host", help="Bind address (default: 0.0.0.0)")
+    p_serve.add_argument("--sec-level", choices=["simple-password", "user-account", "forever"],
+                         help="Authentication mode")
+    p_serve.add_argument("--cache-dir", help="Cache directory path")
+    p_serve.add_argument("--cache-limit", type=float, help="Cache limit in GB")
+
+    # set-password
+    p_setpw = sub.add_parser("set-password", help="Set server password")
+    p_setpw.add_argument("password", help="New password")
+
+    # user
+    p_user = sub.add_parser("user", help="Manage user accounts")
+    p_user_sub = p_user.add_subparsers(dest="user_action", required=True)
+    p_user_add = p_user_sub.add_parser("add", help="Add user")
+    p_user_add.add_argument("username", help="Username")
+    p_user_add.add_argument("--role", choices=["admin", "user", "viewer"], default="user")
+    p_user_list = p_user_sub.add_parser("list", help="List users")
+    p_user_rm = p_user_sub.add_parser("remove", help="Remove user")
+    p_user_rm.add_argument("username", help="Username to remove")
+
+    # sessions
+    p_sess = sub.add_parser("sessions", help="Session management")
+    p_sess_sub = p_sess.add_subparsers(dest="sessions_action", required=True)
+    p_sess_sub.add_parser("revoke-all", help="Revoke all active sessions")
+
+    # cache
+    p_cache = sub.add_parser("cache", help="Cache management")
+    p_cache_sub = p_cache.add_subparsers(dest="cache_action", required=True)
+    p_cache_sub.add_parser("clear", help="Clear transcode cache")
+    p_cache_sub.add_parser("stats", help="Show cache usage")
+
+    # fleet
+    p_fleet = sub.add_parser("fleet", help="GPU fleet management")
+    p_fleet_sub = p_fleet.add_subparsers(dest="fleet_action", required=True)
+    p_fleet_sub.add_parser("test", help="Test SSH connectivity to GPU nodes")
+
+    # iptv
+    p_iptv = sub.add_parser("iptv", help="IPTV management")
+    p_iptv_sub = p_iptv.add_subparsers(dest="iptv_action", required=True)
+    p_iptv_add = p_iptv_sub.add_parser("add", help="Add M3U playlist URL")
+    p_iptv_add.add_argument("url", help="M3U playlist URL")
+    p_iptv_add.add_argument("--name", help="Playlist name")
+    p_iptv_sub.add_parser("list", help="List playlists")
+    p_iptv_sub.add_parser("refresh", help="Refresh all playlists")
+    p_epg_add = p_iptv_sub.add_parser("epg-add", help="Add EPG source URL")
+    p_epg_add.add_argument("url", help="XMLTV EPG URL")
+    p_epg_add.add_argument("--name", help="EPG source name")
+    p_iptv_sub.add_parser("epg-refresh", help="Refresh EPG data")
+
+    # describe
+    p_describe = sub.add_parser("describe", help="Run AI descriptions")
+    p_describe.add_argument("path", nargs="?", help="File or directory to describe")
+
     args = parser.parse_args()
     setup_logging(args.verbose)
 
@@ -304,6 +612,14 @@ def main():
         "worker": cmd_worker,
         "report": cmd_report,
         "status": cmd_status,
+        "serve": cmd_serve,
+        "set-password": cmd_set_password,
+        "user": cmd_user,
+        "sessions": cmd_sessions,
+        "cache": cmd_cache,
+        "fleet": cmd_fleet,
+        "iptv": cmd_iptv,
+        "describe": cmd_describe,
     }
     commands[args.command](args)
 
