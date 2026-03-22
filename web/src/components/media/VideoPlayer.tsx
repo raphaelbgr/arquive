@@ -35,6 +35,13 @@ export function VideoPlayer({ src, poster, autoplay = false }: VideoPlayerProps)
 
     // Direct playback — let browser handle the codec
     video.src = src;
+    // Restore mute preference (default: muted)
+    const savedMute = localStorage.getItem('arquive-muted');
+    video.muted = savedMute === null ? true : savedMute === 'true';
+    // Persist mute changes
+    video.addEventListener('volumechange', () => {
+      localStorage.setItem('arquive-muted', String(video.muted));
+    });
     if (autoplay) video.play().catch(() => {});
 
     return () => { video.src = ''; };

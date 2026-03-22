@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { MediaFile } from '../../types';
+import { MediaBadges } from '../ui/QualityBadge';
 
 interface FileInfoPanelProps {
   file: MediaFile;
@@ -135,6 +136,13 @@ export function FileInfoPanel({ file, isOpen, onClose }: FileInfoPanelProps) {
             )}
 
             {/* General */}
+            {/* Quality badges */}
+            {(file.width || metadata.codec || metadata.framerate) && (
+              <div className="mb-4 flex gap-1 flex-wrap">
+                <MediaBadges width={file.width} height={file.height} codec={metadata.codec} framerate={metadata.framerate} size="sm" />
+              </div>
+            )}
+
             <SectionWrap title="General">
               <Row label="Name" value={file.name} />
               <Row label="Type" value={file.mime_type} />

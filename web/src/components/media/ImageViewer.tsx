@@ -35,21 +35,10 @@ export function ImageViewer({ src, alt, onClose, onPrev, onNext }: ImageViewerPr
     setLoaded(false);
   }, [src, resetView]);
 
-  // Keyboard navigation
+  // Keyboard: only zoom controls — navigation handled by MediaViewer
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
-        case 'Escape':
-          onClose?.();
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          onPrev?.();
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          onNext?.();
-          break;
         case '+':
         case '=':
           e.preventDefault();

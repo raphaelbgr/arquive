@@ -88,12 +88,12 @@ export function MediaViewer({ file, isOpen, onClose, onPrev, onNext }: MediaView
       </div>
 
       {/* Prev/Next arrows */}
-      {onPrev && viewerType !== 'image' && (
+      {onPrev && (
         <button onClick={onPrev} className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/80 hover:bg-white/20">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
         </button>
       )}
-      {onNext && viewerType !== 'image' && (
+      {onNext && (
         <button onClick={onNext} className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white/80 hover:bg-white/20">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
         </button>

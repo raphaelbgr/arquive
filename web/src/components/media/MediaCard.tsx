@@ -5,6 +5,7 @@ import { VideoPreviewTile } from './VideoPreviewTile';
 import { useIntersectionObserver } from '../../hooks/useIntersectionObserver';
 import { ShimmerPlaceholder } from '../ui/ShimmerPlaceholder';
 import { copyToClipboard } from '../../utils/clipboard';
+import { MediaBadges } from '../ui/QualityBadge';
 
 interface MediaCardProps {
   file: MediaFile;
@@ -181,10 +182,21 @@ export function MediaCard({ file, onClick, onInfo, isSelected, onSelect, selecti
           </span>
         )}
 
-        {/* Type badge */}
-        <span className={`absolute top-2 left-2 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${typeInfo.color}`}>
-          {typeInfo.label}
-        </span>
+        {/* Quality badges (resolution, codec, fps) */}
+        <div className="absolute top-1.5 left-1.5 z-10 flex flex-col items-start gap-0.5">
+          {file.width && file.height ? (
+            <MediaBadges
+              width={file.width}
+              height={file.height}
+              codec={(() => { try { const m = file.metadata_json ? JSON.parse(file.metadata_json) : {}; return m.codec; } catch { return null; } })()}
+              framerate={(() => { try { const m = file.metadata_json ? JSON.parse(file.metadata_json) : {}; return m.framerate; } catch { return null; } })()}
+            />
+          ) : (
+            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${typeInfo.color}`}>
+              {typeInfo.label}
+            </span>
+          )}
+        </div>
 
         {/* iOS play button on hover for videos */}
         {isVideo(file) && isHovered && !selectionMode && (
