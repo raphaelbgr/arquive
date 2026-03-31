@@ -7,7 +7,7 @@ faces_dir: "./recognition/faces"
 media_dirs:
   - "F:/Raphael/Backups/Raphael"
   - "H:/"
-  # - "\\\\192.168.7.102\\Shared\\Media"
+  # - "\\\\192.168.1.x\\Shared\\Media"
 
 # Skip files already processed in previous runs
 skip_processed: true
@@ -58,15 +58,15 @@ workers:
       - "C:/"
     path_map: {}  # no translation needed, files are local
   - name: "avell"
-    host: "192.168.7.103"
+    host: "192.168.1.x"
     ssh_alias: "avell"
     gpu: "cuda"
     locality_paths: []
     path_map:
-      "F:/": "//192.168.7.101/Trunk 2 - 3TB drive/"
-      "H:/": "//192.168.7.101/Trunk 4 - 8TB drive/"
+      "F:/": "//192.168.1.x/Trunk 2 - 3TB drive/"
+      "H:/": "//192.168.1.x/Trunk 4 - 8TB drive/"
   - name: "mac-mini"
-    host: "192.168.7.102"
+    host: "192.168.1.x"
     ssh_alias: "mac-mini"
     gpu: "coreml"
     locality_paths: []

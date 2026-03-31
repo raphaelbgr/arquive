@@ -1,6 +1,6 @@
 @echo off
 title Arquive Server
-cd /d "C:\Users\rbgnr\git\face-detection"
+cd /d "~/git\face-detection"
 echo Starting Arquive server...
 echo.
 call venv\Scripts\activate.bat

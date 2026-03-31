@@ -23,9 +23,9 @@ A distributed face recognition system that scans large media archives (terabytes
 
 | Machine | GPU | VRAM | Role |
 |---------|-----|------|------|
-| Windows Desktop (192.168.7.101) | RTX 3080 Ti + GTX 1060 | 12GB + 6GB | Coordinator + Primary Worker |
-| Avell (192.168.7.103) | RTX 3050 | ~4-8GB | Remote Worker |
-| Mac Mini M4 (192.168.7.102) | Apple Silicon (ANE) | Unified | Remote Worker |
+| Windows Desktop (192.168.1.x) | RTX 3080 Ti + GTX 1060 | 12GB + 6GB | Coordinator + Primary Worker |
+| Avell (192.168.1.x) | RTX 3050 | ~4-8GB | Remote Worker |
+| Mac Mini M4 (192.168.1.x) | Apple Silicon (ANE) | Unified | Remote Worker |
 
 ## Architecture
 
