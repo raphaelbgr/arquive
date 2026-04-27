@@ -168,6 +168,25 @@ GPU acceleration uses CUDA (NVIDIA) or CoreML (Apple Silicon) automatically when
 
 ---
 
+## Roadmap
+
+### Done
+
+- Distributed face-recognition pipeline (coordinator + workers, FAISS index)
+- React web UI with timeline, people, folders, IPTV, settings
+- AI descriptions (Qwen2.5-VL via Ollama), GPU transcoding cache
+- Quality / orientation badges, stackable filters, native HLS / video player
+- tvOS client skeleton: live gallery wired to `/api/v1/media`, AVPlayer + AsyncImage
+
+### Next
+
+- **Xcode project for tvOS** — `.swift` files are checked in but no `.xcodeproj`. Needs scaffolding on a machine with full Xcode (Mac App Store install).
+- **Apple TV-side**: people view (key differentiator vs Plex / Jellyfin), pagination beyond first 200, search, real HLS via `/api/v1/media/{id}/stream` instead of `/download` for large files.
+- **Server deployment**: settled on `mac-mini` as the long-running host (Apple Silicon, always-on, sits on the same LAN as the Apple TV). Pending decisions: which SMB-mounted path the live media archive lives on, and whether to route `cache.directory` to the ubuntu shared cache or stay local.
+- **Auth on tvOS**: current code only works against `sec_level: forever`. `simple-password` and `user-account` modes need a login screen.
+
+---
+
 ## License
 
 MIT

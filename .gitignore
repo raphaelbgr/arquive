@@ -10,3 +10,12 @@ worker_cache/
 *.db
 *.faiss
 .env
+
+# macOS
+.DS_Store
+
+# Xcode (when tvOS Xcode project is added)
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.xcworkspace/xcuserdata/
