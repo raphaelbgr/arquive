@@ -33,6 +33,7 @@ Arquive is that tool.
 | Media sources | Local disk, SMB/CIFS, FTP, SSH |
 | File types | Photos, videos, audio, documents |
 | Web UI | React SPA — timeline, people, folders, documents, live TV |
+| Apple TV | Native tvOS client (SwiftUI) for couch browsing and 4K playback |
 | Streaming | In-browser HLS with GPU-accelerated transcoding cache |
 | IPTV | M3U playlists, XMLTV EPG, stream proxy, recording |
 | DLNA | UPnP/DLNA server for smart TVs and media players |
@@ -128,6 +129,31 @@ face-detect set-password   Change the server password
 
 ---
 
+## Apple TV Client
+
+A native tvOS client lives in [`tvos/ArquiveTV/`](tvos/ArquiveTV) — SwiftUI gallery + AVKit player that talks to the Arquive REST API.
+
+```
+tvos/ArquiveTV/
+├── ArquiveTVApp.swift            App entry point
+├── Models/
+│   ├── ArquiveMedia.swift        MediaFile struct (matches /api/v1/media)
+│   └── ArquiveAPI.swift          URLSession-based API client
+└── Views/
+    ├── GalleryView.swift         Adaptive grid with focus parallax
+    └── NativePlayerView.swift    AVPlayer (video) / AsyncImage (photo)
+```
+
+**Setup:**
+
+1. Open the project in Xcode (create a new tvOS App target and drop the `tvos/ArquiveTV/` files in, or use the included Xcode project if present).
+2. Edit `ArquiveAPI.defaultServer` to point at your Arquive server (default: `http://192.168.7.13:64531`), or override at runtime via the `arquive.server` UserDefault.
+3. Build and run on Apple TV (4th generation or later).
+
+The gallery fetches `/api/v1/media?type=media_only&limit=200` on launch, renders thumbnails via `/api/v1/media/{id}/thumbnail`, and streams via `/api/v1/media/{id}/download` — same endpoints used by the web UI.
+
+---
+
 ## Requirements
 
 - Python 3.10+
@@ -136,6 +162,7 @@ face-detect set-password   Change the server password
 - FFmpeg (for transcoding and video thumbnails)
 - Node 18+ (to build the React frontend)
 - Ollama (optional, for AI descriptions)
+- Xcode 15+ (optional, only needed to build the tvOS client)
 
 GPU acceleration uses CUDA (NVIDIA) or CoreML (Apple Silicon) automatically when available.
 
